@@ -1,0 +1,12 @@
+{
+  "playwright.reuseBrowser": false,
+  "playwright.showTrace": false,
+  "playwright.env": {},
+  "playwright.workspaceFolder": "${workspaceFolder}",
+  "playwright.configFile": "playwright.config.ts",
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
+}
