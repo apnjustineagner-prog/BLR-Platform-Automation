@@ -15,20 +15,20 @@
 
 import { test } from '@playwright/test';
 import { PaymentConsolePage } from '../../pages/PLATFORM(SUPERADMIN)/paymentConsolePage';
-import { randomBillAmount, randomManilaWaterAccountNumber } from '../../utils/testData';
+import {
+  paymentConsoleContext,
+  billers,
+  randomBillerAccountNumber,
+  randomAccountName,
+  randomBillAmount,
+} from '../../utils/paymentConsoleData';
 
 // ==============================================================================
-// TEST DATA — Replace placeholders with real values from the UI
+// TEST DATA
 // ==============================================================================
 
-const validData = {
-  businessCategoryAccount: 'AltPayNet Corp. III -',
-  billerAccount: 'AltPayNet Test Credential',
-  serviceType: 'Bills Payment',
-  billerToSearch: 'MANILA WATER COMPANY',
-  accountName: 'Justine Agner',
-  email: 'apn.justineagner@gmail.com',
-};
+const validData = paymentConsoleContext;
+const manilaWater = billers.manilaWater;
 
 // ==============================================================================
 // SETUP
@@ -91,7 +91,8 @@ test('Select business name, biller account, and service type', { tag: ['@smoke']
 
 test('Search for a specific biller account', { tag: ['@smoke'] }, async () => {
   const amount = randomBillAmount();
-  const contractAccountNumber = randomManilaWaterAccountNumber();
+  const contractAccountNumber = randomBillerAccountNumber(manilaWater);
+  const accountName = randomAccountName();
 
   await test.step('Navigate to Payment Console', async () => {
     await paymentConsole.goToPaymentConsole();
@@ -109,16 +110,16 @@ test('Search for a specific biller account', { tag: ['@smoke'] }, async () => {
   // (observed 2026-07-22: clickPreview() timed out, no "Preview" role=button
   // anywhere in the accessibility tree, biller list already populated).
   await test.step('Search for biller: MANILA WATER COMPANY', async () => {
-    await paymentConsole.searchBillerAccount(validData.billerToSearch);
+    await paymentConsole.searchBillerAccount(manilaWater.name);
   });
 
   await test.step('Select biller: MANILA WATER COMPANY', async () => {
-    await paymentConsole.selectBillerAccount(validData.billerToSearch);
+    await paymentConsole.selectBillerAccount(manilaWater.name);
   });
 
   await test.step('Fill MANILA WATER COMPANY payment form', async () => {
     await paymentConsole.fillContractAccountNumber(contractAccountNumber);
-    await paymentConsole.fillBillerAccountName(validData.accountName);
+    await paymentConsole.fillBillerAccountName(accountName);
     await paymentConsole.fillBillerAmount(amount);
     await paymentConsole.fillBillerEmail(validData.email);
   });
@@ -129,9 +130,9 @@ test('Search for a specific biller account', { tag: ['@smoke'] }, async () => {
 
   await test.step('Verify payment summary matches input', async () => {
     await paymentConsole.assertPaymentSummaryDetails({
-      billerName: validData.billerToSearch,
+      billerName: manilaWater.name,
       accountNumber: contractAccountNumber,
-      accountName: validData.accountName,
+      accountName,
       amount,
       email: validData.email,
     });
