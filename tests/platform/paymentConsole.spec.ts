@@ -142,11 +142,15 @@ test.describe('Payment Console — Manila Water Company', () => {
     }
   );
 
-  // The submit button (#submitPaymentFormButton) got stuck disabled +
-  // "Loading..." across every observed run (2026-07-23), even after the
-  // network went idle — never confirmed to actually resolve. Transaction
-  // Module nav/search/history-table locators also aren't captured yet.
-  // Needs a codegen pass on both before this can be written for real.
+  // CONFIRMED (2026-07-23): the submit button (#submitPaymentFormButton) gets
+  // stuck disabled + "Loading..." because transactions are currently failing
+  // on the backend — a system issue on this environment, not a locator/test
+  // problem. paySuccessfully() doesn't assert post-Confirm success, so
+  // BLR-3680/3683 pass even while this is broken; they only prove the form
+  // submits, not that the payment completes. There IS a results table on the
+  // Transaction List page to verify against (see transactionPage.ts) — this
+  // stays fixme until payments actually complete so the reflected data can
+  // be captured for real.
   test.fixme(
     qase(3681, 'Manila Water Company payment is reflected in Transaction History under the Transaction Module after successful validation'),
     { tag: ['@regression'] },
