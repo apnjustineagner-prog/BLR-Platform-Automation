@@ -15,6 +15,7 @@
 
 import { test } from '@playwright/test';
 import { PaymentConsolePage } from '../../pages/PLATFORM(SUPERADMIN)/paymentConsolePage';
+import { randomBillAmount } from '../../utils/testData';
 
 // ==============================================================================
 // TEST DATA — Replace placeholders with real values from the UI
@@ -27,7 +28,6 @@ const validData = {
   billerToSearch: 'MANILA WATER COMPANY',
   contractAccountNumber: '25202094',
   accountName: 'Justine Agner',
-  amount: '50.00',
   email: 'apn.justineagner@gmail.com',
 };
 
@@ -91,6 +91,8 @@ test('Select business name, biller account, and service type', { tag: ['@smoke']
 // ==============================================================================
 
 test('Search for a specific biller account', { tag: ['@smoke'] }, async () => {
+  const amount = randomBillAmount();
+
   await test.step('Navigate to Payment Console', async () => {
     await paymentConsole.goToPaymentConsole();
     await paymentConsole.assertOnPaymentConsolePage();
@@ -117,7 +119,7 @@ test('Search for a specific biller account', { tag: ['@smoke'] }, async () => {
   await test.step('Fill MANILA WATER COMPANY payment form', async () => {
     await paymentConsole.fillContractAccountNumber(validData.contractAccountNumber);
     await paymentConsole.fillBillerAccountName(validData.accountName);
-    await paymentConsole.fillBillerAmount(validData.amount);
+    await paymentConsole.fillBillerAmount(amount);
     await paymentConsole.fillBillerEmail(validData.email);
   });
 
@@ -130,7 +132,7 @@ test('Search for a specific biller account', { tag: ['@smoke'] }, async () => {
       billerName: validData.billerToSearch,
       accountNumber: validData.contractAccountNumber,
       accountName: validData.accountName,
-      amount: validData.amount,
+      amount,
       email: validData.email,
     });
   });

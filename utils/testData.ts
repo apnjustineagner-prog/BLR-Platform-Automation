@@ -141,6 +141,16 @@ export const testCredentials = {
 };
 
 // ==============================================================================
+// RANDOM BILL AMOUNT — ₱51.00–₱500.00
+// ==============================================================================
+// A fresh amount per call so repeat payment runs don't submit the exact same
+// account + amount combination (observed causing duplicate-transaction
+// rejections on the biller side).
+
+export const randomBillAmount = (): string =>
+  (Math.floor(Math.random() * (500 - 51 + 1)) + 51).toFixed(2);
+
+// ==============================================================================
 // ONBOARDING — Merchant test data
 // ==============================================================================
 
