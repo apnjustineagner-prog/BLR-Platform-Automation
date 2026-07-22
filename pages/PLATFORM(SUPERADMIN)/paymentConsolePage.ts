@@ -59,8 +59,8 @@ export class PaymentConsolePage {
   private readonly accountCredentialSelect;
   private readonly serviceTypeSelect;
   private readonly billerSearchInput;
+  private readonly billerSearchResults;
   private readonly paymentCategorySelect;
-  private readonly billerAccountSelect;
   private readonly amountInput;
   private readonly emailInput;
   private readonly previewButton;
@@ -72,18 +72,34 @@ export class PaymentConsolePage {
   private readonly copyPrnButton;
   private readonly generatePrnButton;
 
+  // MANILA WATER COMPANY biller payment form (ids captured live 2026-07-22).
+  // id starts with a digit, so match by attribute rather than a #id selector.
+  private readonly contractAccountNumberInput;
+  private readonly billerAccountNameInput;
+  private readonly billerAmountInput;
+  private readonly billerEmailInput;
+  // Labeled "Pay Now" in the UI; opens the #myModal confirmation dialog whose
+  // real submit button is #submitPaymentFormButton ("Confirm" — see confirmPayButton).
+  private readonly confirmPaymentButton;
+  // Payment Summary modal content — shows back the values just entered
+  // (plus computed Add-on Fee / Service Fee / Total Amount).
+  private readonly paymentSummaryModalBody;
+
   constructor(private page: Page) {
     // Recorded as textbox in one session and combobox in another (see bayadPage)
     this.businessCategoryAccountSelect = page
       .getByRole('combobox', { name: 'Select Business Name' })
-      .or(page.getByRole('textbox', { name: 'Select Business Name' }));
+      .or(page.getByRole('textbox', { name: 'Select Business Name' }))
+      .first();
     this.select2SearchBox              = page.getByRole('searchbox', { name: 'Search' });
     this.agentSelect                   = page.locator('#select2-agentSelect-container');
     this.accountCredentialSelect       = page.locator('#select2-credentialSelect-container');
     this.serviceTypeSelect             = page.locator('#select2-serviceTypesSelect-container');
-    this.billerSearchInput             = page.locator('#billerSearch');
+    // Accessible name has leading whitespace from an embedded icon, so match
+    // loosely (see bayadPage.ts for the same fix). Results render into #searchInput.
+    this.billerSearchInput             = page.getByRole('textbox', { name: /search biller/i });
+    this.billerSearchResults           = page.locator('#searchInput');
     this.paymentCategorySelect         = page.locator('#paymentCategory');
-    this.billerAccountSelect           = page.locator('#billerAccount');
     this.amountInput                   = page.locator('#amount');
     this.emailInput                    = page.locator('#email');
     this.previewButton                 = page.getByRole('button', { name: /preview/i });
@@ -94,16 +110,31 @@ export class PaymentConsolePage {
     this.prnDisplay                    = page.locator('#prnDisplay');
     this.copyPrnButton                 = page.getByRole('button', { name: 'Copy' });
     this.generatePrnButton             = page.getByRole('button', { name: 'Generate PRN' });
+
+    this.contractAccountNumberInput    = page.locator('[id="8_Digit_Contract_Account_Number_"]');
+    this.billerAccountNameInput        = page.locator('#Account_Name');
+    this.billerAmountInput             = page.locator('#Amount');
+    this.billerEmailInput              = page.locator('#email-optional');
+    this.confirmPaymentButton          = page.locator('#confirmPaymentButton');
+    this.paymentSummaryModalBody       = page.locator('#dynamicModalBody');
   }
 
   // --- Navigation -------------------------------------------------------------
 
   // Sidebar link name includes an icon glyph and varies between sessions, so
   // match loosely (same as bayadPage). networkidle is unreliable on this SPA —
-  // wait for the breadcrumb instead.
+  // wait for the breadcrumb instead. The business-name select2 filters
+  // client-side against the /lookup/merchants list fetched on page load; if
+  // that response hasn't landed yet, typing into the search box searches an
+  // empty list and shows "No results found" (observed 2026-07-22) — wait for
+  // it here so selectBusinessCategoryAccount never races it.
   async goToPaymentConsole() {
+    const merchantsLoaded = this.page.waitForResponse((res) =>
+      res.url().includes('/lookup/merchants')
+    );
     await this.page.getByRole('link', { name: /payment console/i }).first().click();
     await this.page.getByText('Payment Console Category').waitFor();
+    await merchantsLoaded;
     console.log('[PaymentConsolePage] Navigated to Payment Console');
   }
 
@@ -119,20 +150,35 @@ export class PaymentConsolePage {
   // The options load asynchronously after the page renders; filling the select2
   // search box forces a re-query, so this doesn't race the initial load. The
   // option text can be longer than the searched value, so match non-exact.
+  // Selecting the business triggers an AJAX call that populates the Biller
+  // Account dropdown; wait on that specific response (networkidle proved
+  // flaky — the option list can still be empty for a moment after the
+  // network settles, see bayadPage.ts for the same fix).
   async selectBusinessCategoryAccount(value: string) {
     await this.businessCategoryAccountSelect.click();
-    await this.select2SearchBox.fill(value);
+    await this.select2SearchBox.pressSequentially(value, { delay: 100 });
+    const credentialsLoaded = this.page.waitForResponse((res) =>
+      res.url().includes('/lookup/payment-console/options/account-credentials')
+    );
     await this.page.getByRole('option', { name: value }).first().click();
+    await credentialsLoaded;
   }
 
   async selectAgent(value: string) {
     await this.agentSelect.click();
     await this.page.getByRole('option', { name: value }).click();
+    await this.page.waitForLoadState('networkidle');
   }
 
+  // Selecting the credential triggers an AJAX call that populates the Service
+  // Type dropdown — same wait requirement as above.
   async selectAccountCredential(value: string) {
     await this.accountCredentialSelect.click();
-    await this.page.getByRole('option', { name: value }).click();
+    const serviceTypesLoaded = this.page.waitForResponse((res) =>
+      res.url().includes('/payment-console/service-type')
+    );
+    await this.page.getByRole('option', { name: value }).first().click();
+    await serviceTypesLoaded;
   }
 
   async selectServiceType(value: string) {
@@ -152,18 +198,84 @@ export class PaymentConsolePage {
     await expect(this.serviceTypeSelect, 'Service Type field should have no selection').toHaveText('Select Service Type');
   }
 
+  // The biller list is already loaded client-side (fetched when the service
+  // type was selected); this search filters it locally via a keyup handler,
+  // so fill() — which doesn't dispatch real key events — silently produces no
+  // results. Type it out for real (see bayadPage.ts for the equivalent fix).
   async searchBillerAccount(searchTerm: string) {
-    await this.billerSearchInput.fill(searchTerm);
-    await this.page.waitForLoadState('networkidle');
+    await this.billerSearchInput.pressSequentially(searchTerm, { delay: 80 });
+    await this.billerSearchResults.getByRole('link', { name: searchTerm, exact: true }).waitFor({ state: 'visible' });
     console.log(`[PaymentConsolePage] Searched for biller: ${searchTerm}`);
+  }
+
+  async selectBillerAccount(billerName: string) {
+    await this.billerSearchResults.getByRole('link', { name: billerName, exact: true }).click();
+    await this.page.waitForLoadState('networkidle');
+    console.log(`[PaymentConsolePage] Selected biller: ${billerName}`);
+  }
+
+  // --- MANILA WATER COMPANY biller payment form --------------------------------
+
+  async fillContractAccountNumber(value: string) {
+    await this.contractAccountNumberInput.fill(value);
+  }
+
+  async fillBillerAccountName(value: string) {
+    await this.billerAccountNameInput.fill(value);
+  }
+
+  async fillBillerAmount(value: string) {
+    await this.billerAmountInput.fill(value);
+  }
+
+  async fillBillerEmail(value: string) {
+    await this.billerEmailInput.fill(value);
+  }
+
+  // Labeled "Pay Now"; opens the #myModal confirmation dialog (submitted via
+  // clickConfirm(), which already targets the modal's "Confirm" button).
+  async clickPayNow() {
+    await this.confirmPaymentButton.click();
+    await this.page.locator('#myModal').waitFor({ state: 'visible' });
+    console.log('[PaymentConsolePage] Pay Now clicked');
+  }
+
+  // Verifies the Payment Summary modal echoes back what was actually typed
+  // into the form, plus the biller's computed fee/total rows (addOnFee,
+  // serviceFee, totalAmount) when the caller wants those pinned down too —
+  // they're server-computed, not user input, so they're optional.
+  async assertPaymentSummaryDetails(details: {
+    billerName: string;
+    accountNumber: string;
+    accountName: string;
+    amount: string;
+    email: string;
+    addOnFee?: string;
+    serviceFee?: string;
+    totalAmount?: string;
+  }) {
+    await this.paymentSummaryModalBody.waitFor({ state: 'visible' });
+    // The biller name/category header sits in #myModal outside #dynamicModalBody
+    // (observed 2026-07-22: #dynamicModalBody only contains the field rows).
+    await expect(this.page.locator('#myModal'), 'Payment summary should show biller name').toContainText(details.billerName);
+    await expect(this.paymentSummaryModalBody, 'Payment summary should show contract account number').toContainText(details.accountNumber);
+    await expect(this.paymentSummaryModalBody, 'Payment summary should show account name').toContainText(details.accountName);
+    await expect(this.paymentSummaryModalBody, 'Payment summary should show bill amount').toContainText(details.amount);
+    await expect(this.paymentSummaryModalBody, 'Payment summary should show email').toContainText(details.email);
+    if (details.addOnFee !== undefined) {
+      await expect(this.paymentSummaryModalBody, 'Payment summary should show add-on fee').toContainText(details.addOnFee);
+    }
+    if (details.serviceFee !== undefined) {
+      await expect(this.paymentSummaryModalBody, 'Payment summary should show service fee').toContainText(details.serviceFee);
+    }
+    if (details.totalAmount !== undefined) {
+      await expect(this.paymentSummaryModalBody, 'Payment summary should show total amount').toContainText(details.totalAmount);
+    }
+    console.log('[PaymentConsolePage] Payment summary details verified against input');
   }
 
   async selectPaymentCategory(value: string) {
     await this.paymentCategorySelect.selectOption(value);
-  }
-
-  async selectBillerAccount(value: string) {
-    await this.billerAccountSelect.selectOption(value);
   }
 
   async fillAmount(value: string) {

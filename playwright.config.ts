@@ -58,7 +58,7 @@ export default defineConfig({
   },
 
   use: {
-    headless: true,
+    headless: false,
 
     // Reuse authenticated session saved by the 'setup' project
     storageState: 'storageState.json',

@@ -65,7 +65,8 @@ export class BayadPage {
     // recorded as textbox in one session and combobox in another, so accept both.
     this.businessCategoryAccountSelect = page
       .getByRole('combobox', { name: 'Select Business Name' })
-      .or(page.getByRole('textbox', { name: 'Select Business Name' }));
+      .or(page.getByRole('textbox', { name: 'Select Business Name' }))
+      .first();
     this.select2SearchBox              = page.getByRole('searchbox', { name: 'Search' });
     this.accountCredentialSelect       = page.getByRole('textbox', { name: 'Select Biller Account' });
     this.serviceTypeSelect             = page.getByRole('textbox', { name: 'Select Service Type' });
@@ -119,15 +120,30 @@ export class BayadPage {
 
   // The business name dropdown filters via a search box; the option text can
   // be longer than the searched value, so match non-exact.
+  // Selecting the business triggers an AJAX call that populates the Biller
+  // Account dropdown; waiting on that specific response (rather than
+  // networkidle, which proved flaky — the option list can still be empty for
+  // a moment after the network settles) so the next select isn't opened
+  // before its options exist (observed 2026-07-22).
   async selectBusinessCategoryAccount(value: string) {
     await this.businessCategoryAccountSelect.click();
     await this.select2SearchBox.fill(value);
+    const credentialsLoaded = this.page.waitForResponse((res) =>
+      res.url().includes('/lookup/payment-console/options/account-credentials')
+    );
     await this.page.getByRole('option', { name: value }).first().click();
+    await credentialsLoaded;
   }
 
+  // Selecting the credential triggers an AJAX call that populates the Service
+  // Type dropdown — same wait requirement as above.
   async selectAccountCredential(value: string) {
     await this.accountCredentialSelect.click();
+    const serviceTypesLoaded = this.page.waitForResponse((res) =>
+      res.url().includes('/payment-console/service-type')
+    );
     await this.page.getByRole('option', { name: value }).first().click();
+    await serviceTypesLoaded;
   }
 
   async selectServiceType(value: string) {
