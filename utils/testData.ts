@@ -151,6 +151,22 @@ export const randomBillAmount = (): string =>
   (Math.floor(Math.random() * (500 - 51 + 1)) + 51).toFixed(2);
 
 // ==============================================================================
+// MANILA WATER — Valid test account numbers
+// ==============================================================================
+// Rotate randomly across a pool of valid accounts, same reason as
+// randomBillAmount — avoids resubmitting the same account+amount pair.
+
+export const manilaWaterAccountNumbers = [
+  '25202094',
+  '24312673',
+  '23621350',
+  '23212060',
+];
+
+export const randomManilaWaterAccountNumber = (): string =>
+  manilaWaterAccountNumbers[Math.floor(Math.random() * manilaWaterAccountNumbers.length)];
+
+// ==============================================================================
 // ONBOARDING — Merchant test data
 // ==============================================================================
 

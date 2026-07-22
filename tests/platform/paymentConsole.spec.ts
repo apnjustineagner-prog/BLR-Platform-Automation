@@ -15,7 +15,7 @@
 
 import { test } from '@playwright/test';
 import { PaymentConsolePage } from '../../pages/PLATFORM(SUPERADMIN)/paymentConsolePage';
-import { randomBillAmount } from '../../utils/testData';
+import { randomBillAmount, randomManilaWaterAccountNumber } from '../../utils/testData';
 
 // ==============================================================================
 // TEST DATA — Replace placeholders with real values from the UI
@@ -26,7 +26,6 @@ const validData = {
   billerAccount: 'AltPayNet Test Credential',
   serviceType: 'Bills Payment',
   billerToSearch: 'MANILA WATER COMPANY',
-  contractAccountNumber: '25202094',
   accountName: 'Justine Agner',
   email: 'apn.justineagner@gmail.com',
 };
@@ -92,6 +91,7 @@ test('Select business name, biller account, and service type', { tag: ['@smoke']
 
 test('Search for a specific biller account', { tag: ['@smoke'] }, async () => {
   const amount = randomBillAmount();
+  const contractAccountNumber = randomManilaWaterAccountNumber();
 
   await test.step('Navigate to Payment Console', async () => {
     await paymentConsole.goToPaymentConsole();
@@ -117,7 +117,7 @@ test('Search for a specific biller account', { tag: ['@smoke'] }, async () => {
   });
 
   await test.step('Fill MANILA WATER COMPANY payment form', async () => {
-    await paymentConsole.fillContractAccountNumber(validData.contractAccountNumber);
+    await paymentConsole.fillContractAccountNumber(contractAccountNumber);
     await paymentConsole.fillBillerAccountName(validData.accountName);
     await paymentConsole.fillBillerAmount(amount);
     await paymentConsole.fillBillerEmail(validData.email);
@@ -130,7 +130,7 @@ test('Search for a specific biller account', { tag: ['@smoke'] }, async () => {
   await test.step('Verify payment summary matches input', async () => {
     await paymentConsole.assertPaymentSummaryDetails({
       billerName: validData.billerToSearch,
-      accountNumber: validData.contractAccountNumber,
+      accountNumber: contractAccountNumber,
       accountName: validData.accountName,
       amount,
       email: validData.email,
