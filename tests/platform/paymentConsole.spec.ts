@@ -29,6 +29,7 @@
 import { test } from '@playwright/test';
 import { qase } from 'playwright-qase-reporter';
 import { PaymentConsolePage } from '../../pages/PLATFORM(SUPERADMIN)/paymentConsolePage';
+import { TransactionPage } from '../../pages/PLATFORM(SUPERADMIN)/transactionPage';
 import {
   paymentConsoleContext,
   billers,
@@ -51,10 +52,12 @@ const context = paymentConsoleContext;
 // ==============================================================================
 
 let paymentConsole: PaymentConsolePage;
+let transactionPage: TransactionPage;
 let currentQaseId = 0;
 
 test.beforeEach(async ({ page }) => {
   paymentConsole = new PaymentConsolePage(page);
+  transactionPage = new TransactionPage(page);
   await page.goto('https://test-web-admin.billeroo.com/dashboard');
   await page.waitForLoadState('networkidle');
 });
@@ -125,6 +128,11 @@ async function paySuccessfully(biller: BillerConfig) {
   await test.step('Click Confirm', async () => {
     await paymentConsole.clickConfirm();
   });
+
+  return test.step('Verify payment receipt', async () => {
+    await paymentConsole.assertPaymentReceipt(biller.name);
+    return paymentConsole.getMerchantReferenceNumber();
+  });
 }
 
 // ==============================================================================
@@ -142,20 +150,32 @@ test.describe('Payment Console — Manila Water Company', () => {
     }
   );
 
-  // CONFIRMED (2026-07-23): the submit button (#submitPaymentFormButton) gets
-  // stuck disabled + "Loading..." because transactions are currently failing
-  // on the backend — a system issue on this environment, not a locator/test
-  // problem. paySuccessfully() doesn't assert post-Confirm success, so
-  // BLR-3680/3683 pass even while this is broken; they only prove the form
-  // submits, not that the payment completes. There IS a results table on the
-  // Transaction List page to verify against (see transactionPage.ts) — this
-  // stays fixme until payments actually complete so the reflected data can
-  // be captured for real.
+  // paySuccessfully() now asserts the post-Confirm receipt for real (catches
+  // the backend hang observed 2026-07-23, where #submitPaymentFormButton got
+  // stuck disabled + "Loading..."), and returns the Merchant Reference Number
+  // used to search here. Navigation + search are wired up for real below —
+  // the only remaining gap is the results table itself: row/column locators
+  // for verifying the transaction's details aren't captured yet, so this
+  // stays fixme (body written but never executed) until that's done.
   test.fixme(
     qase(3681, 'Manila Water Company payment is reflected in Transaction History under the Transaction Module after successful validation'),
     { tag: ['@regression'] },
     async () => {
       currentQaseId = 3681;
+
+      const merchantReference = await paySuccessfully(billers.manilaWater);
+
+      await test.step('Navigate to Transaction List', async () => {
+        await transactionPage.goToTransactionList();
+      });
+
+      await test.step('Search by Merchant Reference Number', async () => {
+        await transactionPage.searchByReference(merchantReference);
+      });
+
+      // TODO: assert a row appears for this transaction and its details
+      // (biller, amount, status) match what was paid — table locators
+      // not captured yet.
     }
   );
 
@@ -188,12 +208,26 @@ test.describe('Payment Console — Visayan Electric Company (VECO)', () => {
     }
   );
 
-  // Same blocker as Manila Water BLR-3681.
+  // Same remaining gap as Manila Water BLR-3681 — see its comment.
   test.fixme(
     qase(3684, 'VECO payment is reflected in Transaction History under the Transaction Module after successful validation'),
     { tag: ['@regression'] },
     async () => {
       currentQaseId = 3684;
+
+      const merchantReference = await paySuccessfully(billers.visayanElectric);
+
+      await test.step('Navigate to Transaction List', async () => {
+        await transactionPage.goToTransactionList();
+      });
+
+      await test.step('Search by Merchant Reference Number', async () => {
+        await transactionPage.searchByReference(merchantReference);
+      });
+
+      // TODO: assert a row appears for this transaction and its details
+      // (biller, amount, status) match what was paid — table locators
+      // not captured yet.
     }
   );
 

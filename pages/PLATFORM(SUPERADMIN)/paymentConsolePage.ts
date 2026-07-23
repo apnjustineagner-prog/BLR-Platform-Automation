@@ -85,6 +85,16 @@ export class PaymentConsolePage {
   // (plus computed Add-on Fee / Service Fee / Total Amount).
   private readonly paymentSummaryModalBody;
 
+  // Post-Confirm receipt ("Payment Successful!") — ids confirmed live 2026-07-23.
+  private readonly receiptHeading;
+  private readonly statusCodeValue;
+  private readonly processorReferenceValue;
+  private readonly transactionDateValue;
+  private readonly totalAmountValue;
+  private readonly serviceProviderValue;
+  private readonly merchantReferenceValue;
+  private readonly transactionReferenceValue;
+
   constructor(private page: Page) {
     // Recorded as textbox in one session and combobox in another (see bayadPage)
     this.businessCategoryAccountSelect = page
@@ -117,6 +127,15 @@ export class PaymentConsolePage {
     this.billerEmailInput              = page.locator('#email-optional');
     this.confirmPaymentButton          = page.locator('#confirmPaymentButton');
     this.paymentSummaryModalBody       = page.locator('#dynamicModalBody');
+
+    this.receiptHeading                = page.getByText('Payment Successful!');
+    this.statusCodeValue               = page.locator('#statusCodeValue');
+    this.processorReferenceValue       = page.locator('#processorReferenceValue');
+    this.transactionDateValue          = page.locator('#transactionDateValue');
+    this.totalAmountValue              = page.locator('#totalAmountValue');
+    this.serviceProviderValue          = page.locator('#serviceProviderValue');
+    this.merchantReferenceValue        = page.locator('#merchantReferenceValue');
+    this.transactionReferenceValue     = page.locator('#transactionReferenceValue');
   }
 
   // --- Navigation -------------------------------------------------------------
@@ -308,6 +327,34 @@ export class PaymentConsolePage {
     await this.confirmPayButton.click();
     await this.page.waitForLoadState('networkidle');
     console.log('[PaymentConsolePage] Payment confirmed');
+  }
+
+  // --- Receipt (post-Confirm) --------------------------------------------------
+
+  // The backend has been observed to hang after Confirm instead of ever
+  // rendering the receipt (see BLR-3681 fixme note in paymentConsole.spec.ts),
+  // so this waits explicitly on the heading with a generous timeout rather
+  // than relying on the default actionTimeout — makes "still stuck loading"
+  // fail clearly here instead of surfacing as a confusing timeout later.
+  async assertPaymentReceipt(billerName: string) {
+    await expect(this.receiptHeading, 'Payment Successful! receipt should render').toBeVisible({ timeout: 30000 });
+    await expect(this.serviceProviderValue, 'Receipt should show the biller name').toHaveText(billerName);
+    await expect(this.statusCodeValue, 'Receipt should show a status').toBeVisible();
+    await expect(this.processorReferenceValue, 'Receipt should show a processor reference').toBeVisible();
+    await expect(this.transactionDateValue, 'Receipt should show a transaction date').toBeVisible();
+    // Fee/total computation isn't confirmed yet — just verify it renders.
+    await expect(this.totalAmountValue, 'Receipt should show the total amount').toBeVisible();
+    await expect(this.merchantReferenceValue, 'Receipt should show a merchant reference number').toBeVisible();
+    await expect(this.transactionReferenceValue, 'Receipt should show a transaction reference number').toBeVisible();
+    console.log('[PaymentConsolePage] Payment receipt verified');
+  }
+
+  async getMerchantReferenceNumber(): Promise<string> {
+    return (await this.merchantReferenceValue.innerText()).trim();
+  }
+
+  async getTransactionReferenceNumber(): Promise<string> {
+    return (await this.transactionReferenceValue.innerText()).trim();
   }
 
   // --- PRN Actions ------------------------------------------------------------
