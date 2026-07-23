@@ -16,10 +16,11 @@
 //     BLR-3680  Successful payment
 //     BLR-3681  Payment reflected in Transaction History
 //     BLR-3682  Payment rejected for invalid account number   — fixme, see below
-//   Visayan Electric Company (VECO)
+//   Visayan Electric Company (VECO) — all fixme, see below (form fields
+//   aren't identical to Manila Water's after all — deferred)
 //     BLR-3683  Successful payment
 //     BLR-3684  Payment reflected in Transaction History
-//     BLR-3685  Payment rejected for invalid account number   — fixme, see below
+//     BLR-3685  Payment rejected for invalid account number
 //
 // Run one biller:  npx playwright test tests/platform/paymentConsole.spec.ts -g "Manila Water"
 // Run everything:  npx playwright test tests/platform/paymentConsole.spec.ts
@@ -197,7 +198,16 @@ test.describe('Payment Console — Manila Water Company', () => {
 
 test.describe('Payment Console — Visayan Electric Company (VECO)', () => {
 
-  test(
+  // CONFIRMED (2026-07-23): VECO's form is NOT identical to Manila Water's,
+  // despite earlier confirmation that all billers share the same fields —
+  // the account field is labeled "11 Digit Account ID" (not "8 Digit
+  // Contract Account Number"), so paySuccessfully()'s
+  // fillContractAccountNumber() call (locator `[id="8_Digit_Contract_..."]`)
+  // times out for VECO. paymentConsolePage.ts needs a biller-agnostic way to
+  // fill that first field (e.g. by position within the form, not by its
+  // label-derived id) before either VECO test can run for real. Deferred —
+  // focusing on Manila Water for now.
+  test.fixme(
     qase(3683, 'Bill payment is processed successfully when a valid VECO transaction is submitted via ECPay'),
     { tag: ['@smoke', '@regression'] },
     async () => {
@@ -206,7 +216,8 @@ test.describe('Payment Console — Visayan Electric Company (VECO)', () => {
     }
   );
 
-  test(
+  // Same blocker as BLR-3683 above.
+  test.fixme(
     qase(3684, 'VECO payment is reflected in Transaction History under the Transaction Module after successful validation'),
     { tag: ['@regression'] },
     async () => {
