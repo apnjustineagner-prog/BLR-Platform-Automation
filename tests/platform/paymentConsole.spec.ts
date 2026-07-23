@@ -14,11 +14,11 @@
 // to run a single biller, or run the whole file for everything):
 //   Manila Water Company
 //     BLR-3680  Successful payment
-//     BLR-3681  Payment reflected in Transaction History      — fixme, see below
+//     BLR-3681  Payment reflected in Transaction History
 //     BLR-3682  Payment rejected for invalid account number   — fixme, see below
 //   Visayan Electric Company (VECO)
 //     BLR-3683  Successful payment
-//     BLR-3684  Payment reflected in Transaction History      — fixme, see below
+//     BLR-3684  Payment reflected in Transaction History
 //     BLR-3685  Payment rejected for invalid account number   — fixme, see below
 //
 // Run one biller:  npx playwright test tests/platform/paymentConsole.spec.ts -g "Manila Water"
@@ -129,10 +129,12 @@ async function paySuccessfully(biller: BillerConfig) {
     await paymentConsole.clickConfirm();
   });
 
-  return test.step('Verify payment receipt', async () => {
+  const merchantReference = await test.step('Verify payment receipt', async () => {
     await paymentConsole.assertPaymentReceipt(biller.name);
     return paymentConsole.getMerchantReferenceNumber();
   });
+
+  return { merchantReference, amount };
 }
 
 // ==============================================================================
@@ -150,20 +152,13 @@ test.describe('Payment Console — Manila Water Company', () => {
     }
   );
 
-  // paySuccessfully() now asserts the post-Confirm receipt for real (catches
-  // the backend hang observed 2026-07-23, where #submitPaymentFormButton got
-  // stuck disabled + "Loading..."), and returns the Merchant Reference Number
-  // used to search here. Navigation + search are wired up for real below —
-  // the only remaining gap is the results table itself: row/column locators
-  // for verifying the transaction's details aren't captured yet, so this
-  // stays fixme (body written but never executed) until that's done.
-  test.fixme(
+  test(
     qase(3681, 'Manila Water Company payment is reflected in Transaction History under the Transaction Module after successful validation'),
     { tag: ['@regression'] },
     async () => {
       currentQaseId = 3681;
 
-      const merchantReference = await paySuccessfully(billers.manilaWater);
+      const { merchantReference } = await paySuccessfully(billers.manilaWater);
 
       await test.step('Navigate to Transaction List', async () => {
         await transactionPage.goToTransactionList();
@@ -173,9 +168,12 @@ test.describe('Payment Console — Manila Water Company', () => {
         await transactionPage.searchByReference(merchantReference);
       });
 
-      // TODO: assert a row appears for this transaction and its details
-      // (biller, amount, status) match what was paid — table locators
-      // not captured yet.
+      await test.step('Verify transaction reflects with correct details', async () => {
+        await transactionPage.assertTransactionRow({
+          billerName: billers.manilaWater.name,
+          merchantReference,
+        });
+      });
     }
   );
 
@@ -208,14 +206,13 @@ test.describe('Payment Console — Visayan Electric Company (VECO)', () => {
     }
   );
 
-  // Same remaining gap as Manila Water BLR-3681 — see its comment.
-  test.fixme(
+  test(
     qase(3684, 'VECO payment is reflected in Transaction History under the Transaction Module after successful validation'),
     { tag: ['@regression'] },
     async () => {
       currentQaseId = 3684;
 
-      const merchantReference = await paySuccessfully(billers.visayanElectric);
+      const { merchantReference } = await paySuccessfully(billers.visayanElectric);
 
       await test.step('Navigate to Transaction List', async () => {
         await transactionPage.goToTransactionList();
@@ -225,9 +222,12 @@ test.describe('Payment Console — Visayan Electric Company (VECO)', () => {
         await transactionPage.searchByReference(merchantReference);
       });
 
-      // TODO: assert a row appears for this transaction and its details
-      // (biller, amount, status) match what was paid — table locators
-      // not captured yet.
+      await test.step('Verify transaction reflects with correct details', async () => {
+        await transactionPage.assertTransactionRow({
+          billerName: billers.visayanElectric.name,
+          merchantReference,
+        });
+      });
     }
   );
 
