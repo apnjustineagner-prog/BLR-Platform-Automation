@@ -200,9 +200,20 @@ export class PaymentConsolePage {
     await serviceTypesLoaded;
   }
 
+  // Selecting the service type triggers the biller category directory to
+  // render (a large DOM — 300KB+ of HTML across every category), which takes
+  // noticeably longer than the AJAX response backing it (confirmed live:
+  // ~2.8s render gap after the response lands). searchBillerAccount() types
+  // into the search box immediately after this returns; if the directory
+  // hasn't finished rendering yet, #searchInput's autocomplete box never
+  // populates (its filter logic isn't wired up yet) and the stale unfiltered
+  // #billers directory is left showing underneath — looks like a search
+  // filter that "doesn't work", but it's really this race. Wait for the
+  // directory (#billers) to render before returning.
   async selectServiceType(value: string) {
     await this.serviceTypeSelect.click();
     await this.page.getByRole('option', { name: value }).click();
+    await this.billerCategoryList.waitFor({ state: 'visible' });
   }
 
   async assertAgentEmpty() {
