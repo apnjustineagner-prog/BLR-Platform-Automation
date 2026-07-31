@@ -66,7 +66,16 @@ export const billers: Record<string, BillerConfig> = {
 export const randomBillerAccountNumber = (biller: BillerConfig): string =>
   biller.accountNumbers[Math.floor(Math.random() * biller.accountNumbers.length)];
 
-export const randomAccountName = (): string => faker.person.fullName();
+// faker.person.fullName() frequently adds a prefix/suffix ("Mr.", "Dr.",
+// "V") and first/last names can be hyphenated or contain apostrophes
+// ("Jakubowski-Frami", "O'Kon") — the biller payment form rejects those with
+// "Please use a valid identifier name" (confirmed live 2026-07-31, BLR-3680).
+// Strip to letters/spaces only so every generated name is accepted.
+export const randomAccountName = (): string =>
+  `${faker.person.firstName()} ${faker.person.lastName()}`
+    .replace(/[^A-Za-z ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 // ₱51.00 up to (but not including) ₱500.00
 export const randomBillAmount = (): string =>
