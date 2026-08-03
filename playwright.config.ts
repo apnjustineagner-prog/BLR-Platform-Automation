@@ -58,7 +58,7 @@ export default defineConfig({
   },
 
   use: {
-    headless: false,
+    headless: true,
 
     // Reuse authenticated session saved by the 'setup' project
     storageState: 'storageState.json',
@@ -69,8 +69,11 @@ export default defineConfig({
     // Take screenshot only when a test fails
     screenshot: 'only-on-failure',
 
-    // Max time to wait for a single action (click, fill, etc.)
-    actionTimeout: 10_000, // 10 seconds
+    // Max time to wait for a single action (click, fill, etc.). Clicks that
+    // trigger a real page navigation block here (not on navigationTimeout)
+    // until the navigation finishes, and this test env can take a while to
+    // render — 10s was tripping that wait before the nav actually completed.
+    actionTimeout: 30_000, // 30 seconds
 
     // Max time to wait for page.goto() to complete
     navigationTimeout: 30_000, // 30 seconds

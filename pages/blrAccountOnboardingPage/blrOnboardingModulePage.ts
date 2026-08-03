@@ -171,9 +171,15 @@ export class OnboardModulePage {
 
   /** Opens the country dropdown, searches, then selects the matching option */
   async selectCountry(searchTerm: string, countryOption: string) {
-    await this.countryInput.click();
-    await this.countrySearchInput.fill(searchTerm);
-    await this.page.getByRole('option', { name: countryOption }).click();
+    const option = this.page.getByRole('option', { name: countryOption });
+    await expect(async () => {
+      if (!(await option.isVisible())) {
+        await this.countryInput.click();
+        await this.countrySearchInput.fill(searchTerm);
+      }
+      await expect(option).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
+    await option.click();
   }
 
   /** Opens the Main Business dropdown (visible only for Sublevel hierarchy), searches, and selects the parent */

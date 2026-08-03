@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import { Page, expect } from '@playwright/test';
 import { fetchOtpFromGmail } from '../../utils/fetchOtp';
 
 type LoginCredentials = {
@@ -57,7 +57,25 @@ export class BlrLoginPage {
       await input.fill('');
       await input.pressSequentially(code[i - 1], { delay: 50 });
     }
-    await this.page.getByRole('button', { name: /verify|submit|confirm/i }).click();
+    // The submit button can render before the SPA attaches its click handler
+    // (same class of bug already fixed for the "Add New Business" button in
+    // blrDashboardPage.ts) — a single click can silently no-op: no error, no
+    // navigation, no visible reaction at all, even with the correct code
+    // (confirmed on video — the filled digits just sit there indefinitely).
+    // Retry the click until the dashboard actually renders. noWaitAfter: this
+    // app doesn't do a real page navigation on success (see the comment in
+    // loginWithGmailOtp), so Playwright's own post-click nav wait would hang.
+    // If the code is genuinely wrong, the dashboard never appears and this
+    // silently gives up after the budget — the caller's own 30s success
+    // check and resend/retry logic still runs normally in that case.
+    const submitButton = this.page.getByRole('button', { name: /verify|submit|confirm/i });
+    const dashboardLink = this.page.getByRole('link', { name: 'Dashboard' }).first();
+    await expect(async () => {
+      await submitButton.click({ noWaitAfter: true });
+      await expect(dashboardLink).toBeVisible({ timeout: 3_000 });
+    })
+      .toPass({ timeout: 15_000 })
+      .catch(() => {});
   }
 
   async loginAdmin(credentials: LoginCredentials) {

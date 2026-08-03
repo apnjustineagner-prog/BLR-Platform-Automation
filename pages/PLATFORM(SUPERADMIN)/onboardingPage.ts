@@ -236,7 +236,10 @@ export class OnboardingPage {
       await this.page.keyboard.press('Escape');
       await openModal.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
     }
-    await this.onboardingLink.click();
+    // This click triggers a real page navigation, and this test env can take
+    // up to a minute to render — give it the same budget as the load/element
+    // waits below instead of the default actionTimeout.
+    await this.onboardingLink.click({ timeout: 60_000 });
     await this.page.waitForLoadState('load', { timeout: 60_000 });
     await this.searchMerchantInput.waitFor({ state: 'visible', timeout: 60_000 });
   }

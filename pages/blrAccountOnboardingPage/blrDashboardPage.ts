@@ -12,13 +12,17 @@ export class BlrDashboardPage {
   async goToOnboardingModule() {
     await this.onboardingModule.waitFor({ state: 'visible' });
     await this.onboardingModule.scrollIntoViewIfNeeded();
-    await this.onboardingModule.click();
-    await expect(this.page).toHaveURL(/.*\/(merchant|business-category).*/);
+    // The click triggers a real page navigation, and this test env can take
+    // up to a minute to render. Playwright's post-click "wait for navigation
+    // to finish" step is bound to the global actionTimeout (10s), which is
+    // too short here — give it the same budget as page.goto() elsewhere.
+    await this.onboardingModule.click({ timeout: 60_000 });
+    await expect(this.page).toHaveURL(/.*\/(merchant|business-category).*/, { timeout: 60_000 });
     console.log('[BlrDashboardPage] Navigated to Onboarding module');
     // Don't use waitForLoadState('networkidle') — the Billeroo SPA polls in the
     // background so the network never goes idle. Wait for the page's primary
     // action button instead as the readiness signal.
-    await this.addNewBusinessModalButton.waitFor({ state: 'visible' });
+    await this.addNewBusinessModalButton.waitFor({ state: 'visible', timeout: 60_000 });
   }
   async clickAddNewBusinessModalButton() {
     // The button can render before the SPA attaches its click handler, so a
