@@ -127,7 +127,10 @@ export class OnboardingPage {
 
   constructor(private page: Page) {
     this.onboardingLink        = page.getByRole('link', { name: /onboarding/i });
-    this.merchantTable         = page.locator('TODO: merchant table locator');
+    // Same underlying table as blrOnboardingModulePage.ts's getMerchantDetails
+    // — this page object drives the same /business-category page, just via a
+    // different set of flows (view/edit/delete/activate rather than create).
+    this.merchantTable         = page.locator('#business-CategoryTable');
     this.viewButton            = page.locator('button.viewButton');
     this.editButton            = page.getByRole('button', { name: /edit/i });
     this.confirmDeleteActionField = page.locator('#deleteInput');
@@ -258,14 +261,25 @@ export class OnboardingPage {
 
   // fill() fires an `input` event, which the DataTables search box listens on —
   // no need to type character-by-character anymore.
+  //
+  // Don't wait on networkidle here (previously did, via a `merchantTable`
+  // locator that was still a literal 'TODO' placeholder and never actually
+  // used): this page polls continuously in the background, same as
+  // blrDashboardPage.ts/blrOnboardingModulePage.ts already document, so
+  // networkidle never resolves — it was hanging until the *test's* timeout,
+  // not its own, which also broke cleanupMerchant() (it calls this method
+  // too) and cascaded into unrelated tests' teardown. Wait on the filtered
+  // row directly instead, matching getMerchantDetails()'s approach.
   async searchMerchant(businessName: string) {
     await this.searchMerchantInput.fill(businessName);
-    await this.page.waitForLoadState('networkidle');
+    await this.merchantTable.locator('tbody tr').filter({ hasText: businessName }).first()
+      .waitFor({ state: 'visible', timeout: 15_000 });
   }
 
   async searchSpecificMerchant(businessName: string) {
     await this.searchMerchantInput.fill(businessName);
-    await this.page.waitForLoadState('networkidle');
+    await this.merchantTable.locator('tbody tr').filter({ hasText: businessName }).first()
+      .waitFor({ state: 'visible', timeout: 15_000 });
   }
 
   async openViewModal(){
