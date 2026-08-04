@@ -512,7 +512,12 @@ test.describe('Merchant', () => {
     qase(2722, 'Merchant deletion requires removal of linked agents before proceeding'),
     { tag: ['@regression'] },
     async ({ page }) => {
-      test.setTimeout(180_000);
+      // Heaviest test in the suite (OTP re-login, 2 raw API calls, UI agent
+      // creation, deactivate, blocked-delete assertion, reactivate+delete
+      // agent, final delete+verify — 9+ steps). 180s was tight even before
+      // the search-retry padding added elsewhere in this file; bumped to
+      // give it real headroom instead of racing the clock on every run.
+      test.setTimeout(300_000);
       currentQaseId = 2722;
 
       let merchantEmail  = '';

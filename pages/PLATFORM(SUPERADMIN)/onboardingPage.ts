@@ -270,16 +270,31 @@ export class OnboardingPage {
   // not its own, which also broke cleanupMerchant() (it calls this method
   // too) and cascaded into unrelated tests' teardown. Wait on the filtered
   // row directly instead, matching getMerchantDetails()'s approach.
+  //
+  // Retry the search itself (not just the row wait): the backend search
+  // index can lag a few seconds behind a just-completed state change
+  // (deactivate/activate/delete), returning a genuine zero-result "No
+  // Merchants" response right after the action's success toast — the same
+  // class of async lag already handled for deletion in
+  // assertMerchantDeleted(). A single search can race that lag; re-issuing
+  // it after a short pause absorbs it instead of failing immediately.
   async searchMerchant(businessName: string) {
-    await this.searchMerchantInput.fill(businessName);
-    await this.merchantTable.locator('tbody tr').filter({ hasText: businessName }).first()
-      .waitFor({ state: 'visible', timeout: 15_000 });
+    await this.searchForMerchantRow(businessName);
   }
 
   async searchSpecificMerchant(businessName: string) {
-    await this.searchMerchantInput.fill(businessName);
-    await this.merchantTable.locator('tbody tr').filter({ hasText: businessName }).first()
-      .waitFor({ state: 'visible', timeout: 15_000 });
+    await this.searchForMerchantRow(businessName);
+  }
+
+  private async searchForMerchantRow(businessName: string) {
+    const row = this.merchantTable.locator('tbody tr').filter({ hasText: businessName }).first();
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await this.searchMerchantInput.fill(businessName);
+      const found = await row.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true).catch(() => false);
+      if (found) return;
+      await this.page.waitForTimeout(3000);
+    }
+    await row.waitFor({ state: 'visible', timeout: 10_000 });
   }
 
   async openViewModal(){
@@ -440,8 +455,16 @@ export class OnboardingPage {
 
     // Deletion is processed async server-side, so the row can still show up
     // for a while after the confirm click returns. Re-search and poll.
+    //
+    // Deliberately NOT using searchSpecificMerchant/searchForMerchantRow here:
+    // that helper retries up to 3x (~49s worst case) because it assumes the
+    // row *should* exist. Here the row is expected to become absent, so every
+    // poll would pay close to that full 49s failing to find it before falling
+    // through — 5 polls could approach/exceed this flow's 180s test budget.
+    // A plain fill + short settle is enough to let the table re-filter.
     for (let attempt = 1; attempt <= 5; attempt++) {
-      await this.searchSpecificMerchant(merchantName);
+      await this.searchMerchantInput.fill(merchantName);
+      await this.page.waitForTimeout(2000);
       const stillVisible = await row.isVisible().catch(() => false);
       if (!stillVisible) return;
       await this.page.waitForTimeout(3000);

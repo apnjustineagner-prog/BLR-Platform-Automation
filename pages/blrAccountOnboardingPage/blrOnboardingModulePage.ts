@@ -164,9 +164,17 @@ export class OnboardModulePage {
   }
 
   async selectLevel(level: string) {
-    await this.levelSelect.click();
-    await this.page.getByRole('option', { name: level, exact: true }).waitFor({ state: 'visible' });
-    await this.page.getByRole('option', { name: level, exact: true }).click();
+    // Same async-options race as selectAccountType/selectCountry above: the
+    // dropdown can open before its options load, and never refreshes in
+    // place once opened early — close and reopen until the real option renders.
+    const option = this.page.getByRole('option', { name: level, exact: true });
+    await expect(async () => {
+      if (!(await option.isVisible())) {
+        await this.levelSelect.click();
+      }
+      await expect(option).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
+    await option.click();
   }
 
   /** Opens the country dropdown, searches, then selects the matching option */
