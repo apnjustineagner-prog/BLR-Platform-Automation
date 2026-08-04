@@ -190,13 +190,24 @@ export class PaymentConsolePage {
   }
 
   // Selecting the credential triggers an AJAX call that populates the Service
-  // Type dropdown — same wait requirement as above.
+  // Type dropdown — same wait requirement as above. The option list itself can
+  // also lag its own backing AJAX response by a couple seconds before it
+  // actually renders (same class of race documented on selectServiceType
+  // below), so re-toggle the dropdown until the real option shows up instead
+  // of clicking whatever's there — confirmed via error-context.md showing the
+  // listbox stuck on its disabled placeholder while this raced.
   async selectAccountCredential(value: string) {
-    await this.accountCredentialSelect.click();
+    const option = this.page.getByRole('option', { name: value }).first();
+    await expect(async () => {
+      if (!(await option.isVisible())) {
+        await this.accountCredentialSelect.click();
+      }
+      await expect(option).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
     const serviceTypesLoaded = this.page.waitForResponse((res) =>
       res.url().includes('/payment-console/service-type')
     );
-    await this.page.getByRole('option', { name: value }).first().click();
+    await option.click();
     await serviceTypesLoaded;
   }
 
