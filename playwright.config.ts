@@ -41,7 +41,7 @@ export default defineConfig({
   testDir: './tests',
 
   // Run all tests in parallel across and within files
-  fullyParallel: true,
+  fullyParallel: false,
   workers: 2,
 
   // Stop after 5 test failures — don't waste time on broken builds

@@ -66,6 +66,13 @@ export const billers: Record<string, BillerConfig> = {
 export const randomBillerAccountNumber = (biller: BillerConfig): string =>
   biller.accountNumbers[Math.floor(Math.random() * biller.accountNumbers.length)];
 
+// Correctly-formatted (8-digit, numeric) but not a real account — the form
+// accepts it through Pay Now same as a valid number; the backend only
+// rejects it after Confirm (confirmed live 2026-08-05, BLR-3682: redirects
+// to payment-console-status-error with statusCode ER.00.05, "Please enter a
+// valid account number").
+export const invalidBillerAccountNumber = '00000000';
+
 // faker.person.fullName() frequently adds a prefix/suffix ("Mr.", "Dr.",
 // "V") and first/last names can be hyphenated or contain apostrophes
 // ("Jakubowski-Frami", "O'Kon") — the biller payment form rejects those with

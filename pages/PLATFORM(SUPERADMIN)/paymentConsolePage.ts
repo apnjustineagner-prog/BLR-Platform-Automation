@@ -85,6 +85,12 @@ export class PaymentConsolePage {
   // (plus computed Add-on Fee / Service Fee / Total Amount).
   private readonly paymentSummaryModalBody;
 
+  // Post-Confirm rejection ("Oh no! Something went wrong.") — the account
+  // number field isn't validated until after Confirm; an invalid one redirects
+  // to payment-console-status-error?statusCode=...&statusDescription=...
+  // (confirmed live 2026-08-05, BLR-3682).
+  private readonly rejectionHeading;
+
   // Post-Confirm receipt ("Payment Successful!") — ids confirmed live 2026-07-23.
   private readonly receiptHeading;
   private readonly statusCodeValue;
@@ -128,6 +134,7 @@ export class PaymentConsolePage {
     this.confirmPaymentButton          = page.locator('#confirmPaymentButton');
     this.paymentSummaryModalBody       = page.locator('#dynamicModalBody');
 
+    this.rejectionHeading               = page.getByText('Oh no! Something went wrong.');
     this.receiptHeading                = page.getByText('Payment Successful!');
     this.statusCodeValue               = page.locator('#statusCodeValue');
     this.processorReferenceValue       = page.locator('#processorReferenceValue');
@@ -211,6 +218,13 @@ export class PaymentConsolePage {
     await serviceTypesLoaded;
   }
 
+  // Same option-list-lags-the-response race as selectAccountCredential above
+  // (confirmed live 2026-08-05, BLR-3682: dropdown opens showing only the
+  // disabled "Select Service Type" placeholder, no real options, because the
+  // list hasn't rendered yet even though its backing response already
+  // landed) — re-toggle until the real option shows up instead of clicking
+  // whatever's there.
+  //
   // Selecting the service type triggers the biller category directory to
   // render (a large DOM — 300KB+ of HTML across every category), which takes
   // noticeably longer than the AJAX response backing it (confirmed live:
@@ -222,8 +236,14 @@ export class PaymentConsolePage {
   // filter that "doesn't work", but it's really this race. Wait for the
   // directory (#billers) to render before returning.
   async selectServiceType(value: string) {
-    await this.serviceTypeSelect.click();
-    await this.page.getByRole('option', { name: value }).click();
+    const option = this.page.getByRole('option', { name: value }).first();
+    await expect(async () => {
+      if (!(await option.isVisible())) {
+        await this.serviceTypeSelect.click();
+      }
+      await expect(option).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
+    await option.click();
     await this.billerCategoryList.waitFor({ state: 'visible' });
   }
 
@@ -369,6 +389,17 @@ export class PaymentConsolePage {
     await expect(this.merchantReferenceValue, 'Receipt should show a merchant reference number').toBeVisible();
     await expect(this.transactionReferenceValue, 'Receipt should show a transaction reference number').toBeVisible();
     console.log('[PaymentConsolePage] Payment receipt verified');
+  }
+
+  // Confirming an invalid account number redirects to
+  // payment-console-status-error with the reason in the statusDescription
+  // query param and echoed in the page body (confirmed live 2026-08-05,
+  // BLR-3682).
+  async assertPaymentRejected(expectedReason: string) {
+    await expect(this.rejectionHeading, 'Payment rejection page should render').toBeVisible({ timeout: 30000 });
+    await expect(this.page, 'URL should reflect the payment-console-status-error redirect').toHaveURL(/payment-console-status-error/);
+    await expect(this.page.getByText(expectedReason), `Rejection page should show reason: ${expectedReason}`).toBeVisible();
+    console.log('[PaymentConsolePage] Payment rejection verified:', expectedReason);
   }
 
   async getMerchantReferenceNumber(): Promise<string> {

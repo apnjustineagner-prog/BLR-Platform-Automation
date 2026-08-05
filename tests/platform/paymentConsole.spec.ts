@@ -15,7 +15,7 @@
 //   Manila Water Company
 //     BLR-3680  Successful payment
 //     BLR-3681  Payment reflected in Transaction History
-//     BLR-3682  Payment rejected for invalid account number   — fixme, see below
+//     BLR-3682  Payment rejected for invalid account number
 //   Visayan Electric Company (VECO) — all fixme, see below (form fields
 //   aren't identical to Manila Water's after all — deferred)
 //     BLR-3683  Successful payment
@@ -38,6 +38,7 @@ import {
   randomBillerAccountNumber,
   randomAccountName,
   randomBillAmount,
+  invalidBillerAccountNumber,
 } from '../../utils/paymentConsoleData';
 import fs from 'fs';
 import path from 'path';
@@ -138,6 +139,52 @@ async function paySuccessfully(biller: BillerConfig) {
   return { merchantReference, amount };
 }
 
+// The account number field isn't validated until after Confirm — Pay Now and
+// the summary modal both accept it same as a valid number (confirmed live
+// 2026-08-05, BLR-3682). Only the outcome differs from paySuccessfully().
+async function payWithInvalidAccountNumber(biller: BillerConfig) {
+  const amount = randomBillAmount();
+  const accountName = randomAccountName();
+
+  await test.step('Navigate to Payment Console', async () => {
+    await paymentConsole.goToPaymentConsole();
+    await paymentConsole.assertOnPaymentConsolePage();
+  });
+
+  await test.step('Select business name, biller account, and service type', async () => {
+    await paymentConsole.selectBusinessCategoryAccount(context.businessCategoryAccount);
+    await paymentConsole.selectAccountCredential(context.billerAccount);
+    await paymentConsole.selectServiceType(context.serviceType);
+  });
+
+  await test.step(`Search for biller: ${biller.name}`, async () => {
+    await paymentConsole.searchBillerAccount(biller.name);
+  });
+
+  await test.step(`Select biller: ${biller.name}`, async () => {
+    await paymentConsole.selectBillerAccount(biller.name);
+  });
+
+  await test.step('Fill payment form with an invalid account number', async () => {
+    await paymentConsole.fillContractAccountNumber(invalidBillerAccountNumber);
+    await paymentConsole.fillBillerAccountName(accountName);
+    await paymentConsole.fillBillerAmount(amount);
+    await paymentConsole.fillBillerEmail(context.email);
+  });
+
+  await test.step('Click Pay Now', async () => {
+    await paymentConsole.clickPayNow();
+  });
+
+  await test.step('Click Confirm', async () => {
+    await paymentConsole.clickConfirm();
+  });
+
+  await test.step('Verify payment is rejected', async () => {
+    await paymentConsole.assertPaymentRejected('Please enter a valid account number');
+  });
+}
+
 // ==============================================================================
 // TESTS — MANILA WATER COMPANY
 // ==============================================================================
@@ -178,15 +225,12 @@ test.describe('Payment Console — Manila Water Company', () => {
     }
   );
 
-  // Rejection behavior is unconfirmed: unknown whether it happens at Pay Now
-  // or after Confirm, and what the error indicator looks like (toast? inline
-  // field error?). Needs a codegen pass with a deliberately invalid account
-  // number before this can be written for real.
-  test.fixme(
+  test(
     qase(3682, 'Payment is rejected when an invalid Manila Water Company account number is submitted via ECPay'),
     { tag: ['@regression'] },
     async () => {
       currentQaseId = 3682;
+      await payWithInvalidAccountNumber(billers.manilaWater);
     }
   );
 
