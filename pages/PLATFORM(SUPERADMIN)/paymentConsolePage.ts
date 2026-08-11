@@ -85,11 +85,14 @@ export class PaymentConsolePage {
   // (plus computed Add-on Fee / Service Fee / Total Amount).
   private readonly paymentSummaryModalBody;
 
-  // Post-Confirm rejection ("Oh no! Something went wrong.") — the account
-  // number field isn't validated until after Confirm; an invalid one redirects
-  // to payment-console-status-error?statusCode=...&statusDescription=...
-  // (confirmed live 2026-08-05, BLR-3682).
-  private readonly rejectionHeading;
+  // Post-Confirm rejection — the account number field isn't validated until
+  // after Confirm; an invalid one (or a duplicate transaction) used to
+  // redirect to payment-console-status-error with an "Oh no! Something went
+  // wrong." heading (confirmed live 2026-08-05, BLR-3682). As of 2026-08-10
+  // it no longer redirects — the Payment Summary modal stays open and shows
+  // the reason inline as a red banner instead (confirmed live via BLR-3682/
+  // 3683 failure screenshots). No fixed locator for the banner itself; match
+  // by the reason text within the still-open modal.
 
   // Post-Confirm receipt ("Payment Successful!") — ids confirmed live 2026-07-23.
   private readonly receiptHeading;
@@ -134,7 +137,6 @@ export class PaymentConsolePage {
     this.confirmPaymentButton          = page.locator('#confirmPaymentButton');
     this.paymentSummaryModalBody       = page.locator('#dynamicModalBody');
 
-    this.rejectionHeading               = page.getByText('Oh no! Something went wrong.');
     this.receiptHeading                = page.getByText('Payment Successful!');
     this.statusCodeValue               = page.locator('#statusCodeValue');
     this.processorReferenceValue       = page.locator('#processorReferenceValue');
@@ -391,14 +393,15 @@ export class PaymentConsolePage {
     console.log('[PaymentConsolePage] Payment receipt verified');
   }
 
-  // Confirming an invalid account number redirects to
-  // payment-console-status-error with the reason in the statusDescription
-  // query param and echoed in the page body (confirmed live 2026-08-05,
-  // BLR-3682).
+  // Confirming an invalid account number or a duplicate transaction keeps
+  // the Payment Summary modal open and shows the reason inline as a red
+  // banner (confirmed live 2026-08-10, BLR-3682/3683 — no redirect anymore).
   async assertPaymentRejected(expectedReason: string) {
-    await expect(this.rejectionHeading, 'Payment rejection page should render').toBeVisible({ timeout: 30000 });
-    await expect(this.page, 'URL should reflect the payment-console-status-error redirect').toHaveURL(/payment-console-status-error/);
-    await expect(this.page.getByText(expectedReason), `Rejection page should show reason: ${expectedReason}`).toBeVisible();
+    await expect(this.page.locator('#myModal'), 'Payment Summary modal should stay open on rejection').toBeVisible();
+    await expect(
+      this.page.locator('#myModal').getByText(expectedReason),
+      `Rejection banner should show reason: ${expectedReason}`
+    ).toBeVisible({ timeout: 30000 });
     console.log('[PaymentConsolePage] Payment rejection verified:', expectedReason);
   }
 

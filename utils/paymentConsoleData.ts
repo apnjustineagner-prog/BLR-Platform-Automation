@@ -39,22 +39,43 @@ export const paymentConsoleContext = {
 export type BillerConfig = {
   name: string;
   accountNumbers: string[];
+  // Flat add-on fee (₱) charged on top of the bill amount, per the Payment
+  // Summary breakdown (confirmed live 2026-08-10). Service fee is always
+  // ₱0.00 for every biller — payment console has no payment gateway
+  // implementation — so it isn't tracked per-biller (see SERVICE_FEE below).
+  addOnFee: number;
 };
 
 export const billers: Record<string, BillerConfig> = {
   manilaWater: {
     name: 'MANILA WATER COMPANY',
     accountNumbers: ['25202094', '24312673', '23621350', '23212060'],
+    addOnFee: 10,
   },
   lagunaWater: {
     name: 'LAGUNAWATER WATER CORPORATION',
     accountNumbers: ['31515361'],
+    addOnFee: 10,
   },
   visayanElectric: {
     name: 'VISAYAN ELECTRIC COMPANY',
     accountNumbers: ['99999200001'],
+    addOnFee: 9,
   },
 };
+
+// ==============================================================================
+// PAYMENT SUMMARY BREAKDOWN — Add-on Fee / Service Fee / Total Amount
+// ==============================================================================
+// Confirmed live 2026-08-10 (Manila Water Payment Summary modal): Total
+// Amount = Bill Amount + Add-on Fee + Service Fee.
+
+// Service fee is always ₱0.00 for every biller — payment console has no
+// payment gateway implementation.
+export const SERVICE_FEE = '0.00';
+
+export const computeTotalAmount = (amount: string, biller: BillerConfig): string =>
+  (parseFloat(amount) + biller.addOnFee).toFixed(2);
 
 // ==============================================================================
 // RANDOM VALUE HELPERS
@@ -84,6 +105,7 @@ export const randomAccountName = (): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
-// ₱51.00 up to (but not including) ₱500.00
+// ₱5.00 up to ₱15.00 — wallet balance is nearly exhausted (2026-08-10), so
+// keep test payment amounts minimal to conserve what's left.
 export const randomBillAmount = (): string =>
-  (Math.floor(Math.random() * (499 - 51 + 1)) + 51).toFixed(2);
+  (Math.floor(Math.random() * (15 - 5 + 1)) + 5).toFixed(2);

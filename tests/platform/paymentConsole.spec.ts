@@ -40,6 +40,8 @@ import {
   randomAccountName,
   randomBillAmount,
   invalidBillerAccountNumber,
+  computeTotalAmount,
+  SERVICE_FEE,
 } from '../../utils/paymentConsoleData';
 import fs from 'fs';
 import path from 'path';
@@ -137,6 +139,9 @@ async function paySuccessfully(
       accountName,
       amount,
       email: context.email,
+      addOnFee: biller.addOnFee.toFixed(2),
+      serviceFee: SERVICE_FEE,
+      totalAmount: computeTotalAmount(amount, biller),
     });
   });
 
@@ -155,6 +160,8 @@ async function paySuccessfully(
 // The account number field isn't validated until after Confirm — Pay Now and
 // the summary modal both accept it same as a valid number (confirmed live
 // 2026-08-05, BLR-3682). Only the outcome differs from paySuccessfully().
+// Note: Confirm no longer redirects to a rejection page on failure — the
+// modal stays open and shows the reason inline (confirmed live 2026-08-10).
 async function payWithInvalidAccountNumber(biller: BillerConfig) {
   const amount = randomBillAmount();
   const accountName = randomAccountName();
@@ -184,8 +191,8 @@ async function payWithInvalidAccountNumber(biller: BillerConfig) {
 // Resubmitting the exact same account number + amount as an already-processed
 // transaction is rejected post-Confirm with "Transaction cannot be processed.
 // System detects this to be a double transaction." (confirmed live
-// 2026-08-05, BLR-3683 — same rejection-page shape as BLR-3682's invalid
-// account number, different statusDescription text). Pin the account
+// 2026-08-05, BLR-3683 — same inline-modal-banner shape as BLR-3682's invalid
+// account number, different reason text). Pin the account
 // number/name/amount so both submissions are identical — the random helpers
 // in paymentConsoleData.ts exist specifically to *avoid* this rejection on
 // unrelated runs, so bypass them here on purpose.
