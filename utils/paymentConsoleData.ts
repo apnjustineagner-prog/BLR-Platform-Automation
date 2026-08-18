@@ -35,9 +35,19 @@ export const paymentConsoleContext = {
 // Each biller's payment form fields/ids still need confirming via codegen
 // (Manila Water's form is captured — see paymentConsolePage.ts; Laguna Water
 // and Visayan Electric are not wired up yet, only their valid test accounts).
+//
+// Payment Console routes a payment through one of two processors depending
+// on the biller: ECPay or Bayad. Every biller below is ECPay — Manila
+// Water, Laguna Water, and Visayan Electric (VECO) are all ECPay billers.
+// Bayad billers (Meralco, Maynilad Water — BLR-3671–3676) are a separate,
+// currently-inactive suite: their page object (bayadPage.ts) exists but has
+// no wired-up spec file (dropped 2026-07-23, see
+// project_bayad_tests.md/project_payment_console_tests.md) — don't assume
+// they share this registry or paymentConsole.spec.ts's helpers.
 
 export type BillerConfig = {
   name: string;
+  processor: 'ECPay' | 'Bayad';
   accountNumbers: string[];
   // Flat add-on fee (₱) charged on top of the bill amount, per the Payment
   // Summary breakdown (confirmed live 2026-08-10). Service fee is always
@@ -49,16 +59,19 @@ export type BillerConfig = {
 export const billers: Record<string, BillerConfig> = {
   manilaWater: {
     name: 'MANILA WATER COMPANY',
+    processor: 'ECPay',
     accountNumbers: ['25202094', '24312673', '23621350', '23212060'],
     addOnFee: 10,
   },
   lagunaWater: {
     name: 'LAGUNAWATER WATER CORPORATION',
+    processor: 'ECPay',
     accountNumbers: ['31515361'],
     addOnFee: 10,
   },
   visayanElectric: {
     name: 'VISAYAN ELECTRIC COMPANY',
+    processor: 'ECPay',
     accountNumbers: ['99999200001'],
     addOnFee: 9,
   },

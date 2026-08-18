@@ -1,29 +1,41 @@
 // tests/platform/paymentConsole.spec.ts
 //
 // ==============================================================================
-// PAYMENT CONSOLE TEST SUITE (ECPay)
+// PAYMENT CONSOLE TEST SUITE — ECPay
 // ==============================================================================
+//
+// PROCESSOR SCOPE: Payment Console routes a payment through one of two
+// processors depending on the biller — ECPay or Bayad. This file covers
+// ECPay billers ONLY (every biller in utils/paymentConsoleData.ts's
+// `billers` registry has `processor: 'ECPay'`). Bayad billers (Meralco,
+// Maynilad Water — BLR-3671–3676) are a separate, currently-inactive suite:
+// their page object (pages/PLATFORM(SUPERADMIN)/bayadPage.ts) exists but
+// has no wired-up spec file (dropped 2026-07-23 as "superseded, not ready
+// to run" — see memory/project_bayad_tests.md). Don't add a Bayad biller to
+// this file's `billers` registry or describe blocks — it needs its own
+// suite once bayadPage.ts's locators are confirmed live.
 //
 // FLOW:
 //   Login → Dashboard → Payment Console → select business name, biller
 //   account, service type → search & select biller → fill payment form →
-//   Pay Now → Confirm. All billers use the same form fields — only the
-//   biller and account number differ (confirmed 2026-07-23).
+//   Pay Now → Confirm. All ECPay billers use the same form fields — only
+//   the biller and account number differ (confirmed 2026-07-23).
 //
 // TEST ORGANIZATION (one test.describe per biller — grep by describe title
 // to run a single biller, or run the whole file for everything):
-//   Manila Water Company
+//   ECPay — Manila Water Company
 //     BLR-3680  Successful payment
 //     BLR-3681  Payment reflected in Transaction History
 //     BLR-3682  Payment rejected for invalid account number
 //     BLR-3683  Payment rejected as duplicate transaction (already paid)
-//   Visayan Electric Company (VECO) — all fixme, see below (form fields
-//   aren't identical to Manila Water's after all — deferred)
+//   ECPay — Visayan Electric Company (VECO) — all fixme, see below (form
+//   fields aren't identical to Manila Water's after all — deferred)
 //     BLR-3684  Successful payment
 //     BLR-3685  Payment reflected in Transaction History
 //     BLR-3686  Payment rejected for invalid account number
 //
 // Run one biller:  npx playwright test tests/platform/paymentConsole.spec.ts -g "Manila Water"
+// Run all ECPay:   npx playwright test tests/platform/paymentConsole.spec.ts -g "ECPay"
 // Run everything:  npx playwright test tests/platform/paymentConsole.spec.ts
 //
 // ==============================================================================
@@ -228,10 +240,10 @@ async function payWithDuplicateTransaction(biller: BillerConfig) {
 }
 
 // ==============================================================================
-// TESTS — MANILA WATER COMPANY
+// TESTS — MANILA WATER COMPANY (ECPay)
 // ==============================================================================
 
-test.describe('Payment Console — Manila Water Company', () => {
+test.describe('Payment Console — ECPay — Manila Water Company', () => {
 
   test(
     qase(3680, 'Bill payment is processed successfully when a valid Manila Water Company transaction is submitted via ECPay'),
@@ -291,10 +303,10 @@ test.describe('Payment Console — Manila Water Company', () => {
 });
 
 // ==============================================================================
-// TESTS — VISAYAN ELECTRIC COMPANY (VECO)
+// TESTS — VISAYAN ELECTRIC COMPANY (VECO) (ECPay)
 // ==============================================================================
 
-test.describe('Payment Console — Visayan Electric Company (VECO)', () => {
+test.describe('Payment Console — ECPay — Visayan Electric Company (VECO)', () => {
 
   // CONFIRMED (2026-07-23): VECO's form is NOT identical to Manila Water's,
   // despite earlier confirmation that all billers share the same fields —
