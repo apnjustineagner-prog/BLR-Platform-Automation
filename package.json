@@ -1,5 +1,5 @@
 {
-  "name": "qa-automation-template",
+  "name": "blr-platform-automation",
   "version": "1.0.0",
   "description": "QA Automation Template — Playwright + TypeScript + Faker + Qase",
   "scripts": {
