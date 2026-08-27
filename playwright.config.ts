@@ -42,7 +42,7 @@ export default defineConfig({
 
   // Run all tests in parallel across and within files
   fullyParallel: false,
-  workers: 2,
+  workers: 3,
 
   // Stop after 5 test failures — don't waste time on broken builds
   maxFailures: 5,
