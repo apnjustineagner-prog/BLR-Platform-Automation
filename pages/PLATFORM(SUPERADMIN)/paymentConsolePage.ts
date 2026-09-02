@@ -85,6 +85,15 @@ export class PaymentConsolePage {
   // (plus computed Add-on Fee / Service Fee / Total Amount).
   private readonly paymentSummaryModalBody;
 
+  // Bayad-style biller payment form (Maynilad Water; ids confirmed live
+  // 2026-09-01) — a plain "Account Number" + "Amount" + "Email(Optional)",
+  // no separate "Account Name" field like Manila Water's form. Matched by
+  // role rather than id since no id was captured for these live.
+  private readonly genericAccountNumberInput;
+  private readonly genericAmountInput;
+  private readonly genericEmailInput;
+  private readonly genericPayNowButton;
+
   // Post-Confirm rejection — the account number field isn't validated until
   // after Confirm; an invalid one (or a duplicate transaction) used to
   // redirect to payment-console-status-error with an "Oh no! Something went
@@ -97,8 +106,13 @@ export class PaymentConsolePage {
   // Post-Confirm receipt ("Payment Successful!") — ids confirmed live 2026-07-23.
   private readonly receiptHeading;
   private readonly statusCodeValue;
+  private readonly accountNumberValue;
   private readonly processorReferenceValue;
   private readonly transactionDateValue;
+  private readonly agentNameValue;
+  private readonly billAmountValue;
+  private readonly addOnFeeValue;
+  private readonly serviceFeeValue;
   private readonly totalAmountValue;
   private readonly serviceProviderValue;
   private readonly merchantReferenceValue;
@@ -137,10 +151,20 @@ export class PaymentConsolePage {
     this.confirmPaymentButton          = page.locator('#confirmPaymentButton');
     this.paymentSummaryModalBody       = page.locator('#dynamicModalBody');
 
+    this.genericAccountNumberInput     = page.getByRole('textbox', { name: 'Account Number', exact: true });
+    this.genericAmountInput            = page.getByRole('spinbutton', { name: 'Amount' });
+    this.genericEmailInput             = page.getByRole('textbox', { name: 'Email(Optional)' });
+    this.genericPayNowButton           = page.getByRole('button', { name: 'Pay Now' });
+
     this.receiptHeading                = page.getByText('Payment Successful!');
     this.statusCodeValue               = page.locator('#statusCodeValue');
+    this.accountNumberValue            = page.locator('#accountNumberValue');
     this.processorReferenceValue       = page.locator('#processorReferenceValue');
     this.transactionDateValue          = page.locator('#transactionDateValue');
+    this.agentNameValue                = page.locator('#agentNameValue');
+    this.billAmountValue               = page.locator('#billAmountValue');
+    this.addOnFeeValue                 = page.locator('#addOnFeeValue');
+    this.serviceFeeValue               = page.locator('#serviceFeeValue');
     this.totalAmountValue              = page.locator('#totalAmountValue');
     this.serviceProviderValue          = page.locator('#serviceProviderValue');
     this.merchantReferenceValue        = page.locator('#merchantReferenceValue');
@@ -303,14 +327,38 @@ export class PaymentConsolePage {
     console.log('[PaymentConsolePage] Pay Now clicked');
   }
 
+  // --- Bayad-style biller payment form (Maynilad Water) ------------------------
+  // No separate Account Name field — Account Number + Amount + Email(Optional)
+  // only (confirmed live 2026-09-01).
+
+  async fillGenericAccountNumber(value: string) {
+    await this.genericAccountNumberInput.fill(value);
+  }
+
+  async fillGenericAmount(value: string) {
+    await this.genericAmountInput.fill(value);
+  }
+
+  async fillGenericEmail(value: string) {
+    await this.genericEmailInput.fill(value);
+  }
+
+  async clickGenericPayNow() {
+    await this.genericPayNowButton.click();
+    await this.page.locator('#myModal').waitFor({ state: 'visible' });
+    console.log('[PaymentConsolePage] Pay Now clicked (generic Bayad-style form)');
+  }
+
   // Verifies the Payment Summary modal echoes back what was actually typed
   // into the form, plus the biller's computed fee/total rows (addOnFee,
   // serviceFee, totalAmount) when the caller wants those pinned down too —
   // they're server-computed, not user input, so they're optional.
+  // accountName is likewise optional — Bayad billers like Maynilad Water
+  // have no Account Name field to echo back (confirmed live 2026-09-01).
   async assertPaymentSummaryDetails(details: {
     billerName: string;
     accountNumber: string;
-    accountName: string;
+    accountName?: string;
     amount: string;
     email: string;
     addOnFee?: string;
@@ -322,7 +370,9 @@ export class PaymentConsolePage {
     // (observed 2026-07-22: #dynamicModalBody only contains the field rows).
     await expect(this.page.locator('#myModal'), 'Payment summary should show biller name').toContainText(details.billerName);
     await expect(this.paymentSummaryModalBody, 'Payment summary should show contract account number').toContainText(details.accountNumber);
-    await expect(this.paymentSummaryModalBody, 'Payment summary should show account name').toContainText(details.accountName);
+    if (details.accountName !== undefined) {
+      await expect(this.paymentSummaryModalBody, 'Payment summary should show account name').toContainText(details.accountName);
+    }
     await expect(this.paymentSummaryModalBody, 'Payment summary should show bill amount').toContainText(details.amount);
     await expect(this.paymentSummaryModalBody, 'Payment summary should show email').toContainText(details.email);
     if (details.addOnFee !== undefined) {
@@ -376,20 +426,40 @@ export class PaymentConsolePage {
   // --- Receipt (post-Confirm) --------------------------------------------------
 
   // The backend has been observed to hang after Confirm instead of ever
-  // rendering the receipt (see BLR-3681 fixme note in paymentConsole.spec.ts),
-  // so this waits explicitly on the heading with a generous timeout rather
+  // rendering the receipt (see BLR-3681 fixme note in ecpay.spec.ts), so
+  // this waits explicitly on the heading with a generous timeout rather
   // than relying on the default actionTimeout — makes "still stuck loading"
   // fail clearly here instead of surfacing as a confusing timeout later.
-  async assertPaymentReceipt(billerName: string) {
+  //
+  // Verifies the receipt echoes back what was actually paid (ids confirmed
+  // live 2026-09-01 via #dynamicReceiptContent) — mirrors
+  // assertPaymentSummaryDetails() one step later in the flow. Fee/total rows
+  // are confirmed to equal Bill Amount + Add-on Fee + Service Fee, same as
+  // the Payment Summary modal. accountNumber is asserted as a plain
+  // equality check — pass what the receipt should actually show, which
+  // isn't always what was submitted (ECPay's receipt currently renders
+  // Account Number blank; see the accountNumber: '' comment in
+  // ecpay.spec.ts's paySuccessfully()).
+  async assertPaymentReceipt(details: {
+    billerName: string;
+    accountNumber: string;
+    amount: string;
+    addOnFee: string;
+    serviceFee: string;
+    totalAmount: string;
+  }) {
     await expect(this.receiptHeading, 'Payment Successful! receipt should render').toBeVisible({ timeout: 30000 });
-    await expect(this.serviceProviderValue, 'Receipt should show the biller name').toHaveText(billerName);
-    await expect(this.statusCodeValue, 'Receipt should show a status').toBeVisible();
-    await expect(this.processorReferenceValue, 'Receipt should show a processor reference').toBeVisible();
-    await expect(this.transactionDateValue, 'Receipt should show a transaction date').toBeVisible();
-    // Fee/total computation isn't confirmed yet — just verify it renders.
-    await expect(this.totalAmountValue, 'Receipt should show the total amount').toBeVisible();
-    await expect(this.merchantReferenceValue, 'Receipt should show a merchant reference number').toBeVisible();
-    await expect(this.transactionReferenceValue, 'Receipt should show a transaction reference number').toBeVisible();
+    await expect(this.serviceProviderValue, 'Receipt should show the biller name').toHaveText(details.billerName);
+    await expect(this.statusCodeValue, 'Receipt should show Payment Posted status').toHaveText('Payment Posted');
+    await expect(this.accountNumberValue, 'Receipt should show the contract account number').toHaveText(details.accountNumber);
+    await expect(this.processorReferenceValue, 'Receipt should show a processor reference').not.toBeEmpty();
+    await expect(this.transactionDateValue, 'Receipt should show a transaction date').not.toBeEmpty();
+    await expect(this.billAmountValue, 'Receipt should show the bill amount').toHaveText(details.amount);
+    await expect(this.addOnFeeValue, 'Receipt should show the add-on fee').toHaveText(details.addOnFee);
+    await expect(this.serviceFeeValue, 'Receipt should show the service fee').toHaveText(details.serviceFee);
+    await expect(this.totalAmountValue, 'Receipt should show the total amount').toHaveText(details.totalAmount);
+    await expect(this.merchantReferenceValue, 'Receipt should show a merchant reference number').not.toBeEmpty();
+    await expect(this.transactionReferenceValue, 'Receipt should show a transaction reference number').not.toBeEmpty();
     console.log('[PaymentConsolePage] Payment receipt verified');
   }
 
@@ -403,6 +473,27 @@ export class PaymentConsolePage {
       `Rejection banner should show reason: ${expectedReason}`
     ).toBeVisible({ timeout: 30000 });
     console.log('[PaymentConsolePage] Payment rejection verified:', expectedReason);
+  }
+
+  // The backend's duplicate-transaction check is keyed by account number and
+  // isn't scoped to a single test run — a fresh run can occasionally land on
+  // an account number the biller side already flagged, showing this same
+  // "Transaction cannot be processed. System detects this to be a double
+  // transaction." banner on an otherwise-valid payment (confirmed live
+  // 2026-09-02, BLR-3681). Callers that just want a successful payment (as
+  // opposed to BLR-3683, which deliberately asserts this rejection) use this
+  // to detect it and retry with a different account number instead of
+  // failing. Short timeout since the rejection banner renders immediately on
+  // Confirm — it's the success path (the receipt) that can be slow.
+  async isDuplicateTransactionRejection(): Promise<boolean> {
+    try {
+      await expect(
+        this.page.locator('#myModal').getByText('Transaction cannot be processed. System detects this to be a double transaction.')
+      ).toBeVisible({ timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async getMerchantReferenceNumber(): Promise<string> {

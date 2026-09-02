@@ -39,11 +39,10 @@ export const paymentConsoleContext = {
 // Payment Console routes a payment through one of two processors depending
 // on the biller: ECPay or Bayad. Every biller below is ECPay — Manila
 // Water, Laguna Water, and Visayan Electric (VECO) are all ECPay billers.
-// Bayad billers (Meralco, Maynilad Water — BLR-3671–3676) are a separate,
-// currently-inactive suite: their page object (bayadPage.ts) exists but has
-// no wired-up spec file (dropped 2026-07-23, see
-// project_bayad_tests.md/project_payment_console_tests.md) — don't assume
-// they share this registry or paymentConsole.spec.ts's helpers.
+// Bayad billers (Meralco, Maynilad Water — BLR-3671–3676) live in the
+// separate `bayadBillers` registry below and their own spec file
+// (tests/platform/Payment Console/bayad.spec.ts) — don't assume they share
+// this registry or ecpay.spec.ts's helpers.
 
 export type BillerConfig = {
   name: string;
@@ -60,7 +59,13 @@ export const billers: Record<string, BillerConfig> = {
   manilaWater: {
     name: 'MANILA WATER COMPANY',
     processor: 'ECPay',
-    accountNumbers: ['25202094', '24312673', '23621350', '23212060'],
+    // '26412953' removed (2026-09-02) — permanently flagged as a double
+    // transaction backend-side, regardless of amount: 5 retries with 5
+    // different amounts (6.00, 8.00, 5.00, 5.00, 10.00) all rejected it, and
+    // a manual retry afterward with yet another amount (10.00) still got
+    // rejected. Not a per-amount or time-windowed block, so no retry logic
+    // can work around it — just don't use it.
+    accountNumbers: ['24312673', '23621350', '23212060'],
     addOnFee: 10,
   },
   lagunaWater: {
@@ -74,6 +79,27 @@ export const billers: Record<string, BillerConfig> = {
     processor: 'ECPay',
     accountNumbers: ['99999200001'],
     addOnFee: 9,
+  },
+};
+
+// ==============================================================================
+// BAYAD BILLERS — separate registry, separate suite (tests/platform/
+// Payment Console/bayad.spec.ts)
+// ==============================================================================
+// Kept apart from `billers` above on purpose — that registry/ecpay.spec.ts's
+// helpers are ECPay-only by design (see that file's header comment).
+// Confirmed live 2026-09-01: Bayad billers render through the same
+// Payment Console modal/receipt (#dynamicModalBody / #dynamicReceiptContent,
+// same ids as ECPay), so they reuse PaymentConsolePage rather than the
+// older, unfinished bayadPage.ts — only the biller-specific payment form
+// differs (Maynilad Water has a plain "Account Number" + "Amount" +
+// "Email(Optional)", no separate "Account Name" field like Manila Water).
+export const bayadBillers: Record<string, BillerConfig> = {
+  mayniladWater: {
+    name: 'MAYNILAD WATER',
+    processor: 'Bayad',
+    accountNumbers: ['62725870'],
+    addOnFee: 10,
   },
 };
 
@@ -118,7 +144,14 @@ export const randomAccountName = (): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
-// ₱5.00 up to ₱15.00 — wallet balance is nearly exhausted (2026-08-10), so
+// ₱5.00 up to ₱10.00 — wallet balance is nearly exhausted (2026-08-10), so
 // keep test payment amounts minimal to conserve what's left.
 export const randomBillAmount = (): string =>
-  (Math.floor(Math.random() * (15 - 5 + 1)) + 5).toFixed(2);
+  (Math.floor(Math.random() * (10 - 5 + 1)) + 5).toFixed(2);
+
+// Bayad enforces a Php20.00 minimum ("The minimum amount for payments must
+// be at least Php20.00" — confirmed live 2026-09-01) — higher than ECPay's
+// floor, so Bayad tests need their own random-amount helper. ₱20.00 up to
+// ₱25.00 to stay minimal given the wallet balance constraint above.
+export const randomBayadBillAmount = (): string =>
+  (Math.floor(Math.random() * (25 - 20 + 1)) + 20).toFixed(2);

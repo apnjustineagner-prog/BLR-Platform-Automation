@@ -41,7 +41,7 @@ export default defineConfig({
   testDir: './tests',
 
   // Run all tests in parallel across and within files
-  fullyParallel: false,
+  fullyParallel: true,
   workers: 3,
 
   // Stop after 5 test failures — don't waste time on broken builds
@@ -83,10 +83,11 @@ export default defineConfig({
   reporter: [
     ['list'],
     ['playwright-qase-reporter', {
-      mode: process.env.QASE_ENABLED === 'false' ? 'testops' : 'off',
+      mode: process.env.QASE_ENABLED === 'true' ? 'testops' : 'off',
       testops: {
         api: { token: process.env.QASE_TESTOPS_API_TOKEN },
         project: 'BLR',
+        uploadAttachments: true,
         run: {
           title: buildRunTitle(),
           complete: true,
