@@ -286,15 +286,26 @@ export class OnboardingPage {
     await this.searchForMerchantRow(businessName);
   }
 
+  // The row can lag behind creation on the slow shared env, worse under
+  // parallel workers (confirmed live 2026-09-09: BLR-2717/2724 timed out here
+  // while the row appeared moments later). Re-search with a short per-attempt
+  // wait, and reload between attempts so a stale filtered "no results" table
+  // (which never refreshes on its own) picks the row up once the backend
+  // catches up. Short waits + more attempts stay well within the test budget.
   private async searchForMerchantRow(businessName: string) {
     const row = this.merchantTable.locator('tbody tr').filter({ hasText: businessName }).first();
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    const MAX_ATTEMPTS = 8;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      if (attempt > 1) {
+        await this.page.reload({ waitUntil: 'domcontentloaded' });
+        await this.merchantTable.waitFor({ state: 'visible', timeout: 60_000 });
+      }
       await this.searchMerchantInput.fill(businessName);
-      const found = await row.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true).catch(() => false);
+      const found = await row.waitFor({ state: 'visible', timeout: 5_000 }).then(() => true).catch(() => false);
       if (found) return;
-      await this.page.waitForTimeout(3000);
     }
-    await row.waitFor({ state: 'visible', timeout: 10_000 });
+    // Final wait surfaces a clear timeout error if the row truly never appears.
+    await row.waitFor({ state: 'visible', timeout: 5_000 });
   }
 
   async openViewModal(){
@@ -653,8 +664,12 @@ export class OnboardingPage {
   }
 
   async submitAddAgent() {
+    // No networkidle wait — this SPA polls continuously so it never fires
+    // (same fix as OnboardModulePage.submitAddNewBusiness). Shared by the
+    // success path and the client-side validation failures (empty/too-long
+    // name), which produce no network traffic at all; callers assert on the
+    // success toast or validation message, both of which auto-wait.
     await this.agentAddButton.click();
-    await this.page.waitForLoadState('networkidle');
   }
 
   async addAgent(data: AgentData) {

@@ -34,6 +34,7 @@ import { test } from '@playwright/test';
 import { AccountCredentialPage } from '../../pages/PLATFORM(SUPERADMIN)/accountCredentialPage';
 import { BlrLoginPage } from '../../pages/blrAccountOnboardingPage/blrLoginPage';
 import { qase } from 'playwright-qase-reporter';
+import { attachScreenshot } from '../../utils/attachScreenshot';
 import credentials from '../../utils/decrypt';
 
 // ==============================================================================
@@ -65,18 +66,9 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.afterEach(async ({ page }, testInfo) => {
-  const screenshotName = currentQaseId
-    ? `BLR-${currentQaseId}`
-    : testInfo.title.replace(/\s+/g, '_');
-
-  const screenshotPath = `screenshots/${screenshotName}.png`;
-
-  await page.screenshot({ path: screenshotPath });
-
-  await testInfo.attach(screenshotName, {
-    path: screenshotPath,
-    contentType: 'image/png'
-  });
+  // Bundled under screenshots/<spec-slug>/ and attached to Playwright + Qase.
+  const baseName = currentQaseId ? `BLR-${currentQaseId}` : undefined;
+  await attachScreenshot(testInfo, { page, baseName, label: 'final-page' });
 
   if (testInfo.status === 'passed') {
     console.log(`[PASSED] qase.id ${currentQaseId} - ${testInfo.title}`);

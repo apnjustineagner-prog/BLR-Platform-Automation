@@ -144,11 +144,31 @@ export class PaymentConsolePage {
     this.copyPrnButton                 = page.getByRole('button', { name: 'Copy' });
     this.generatePrnButton             = page.getByRole('button', { name: 'Generate PRN' });
 
-    this.contractAccountNumberInput    = page.locator('[id="8_Digit_Contract_Account_Number_"]');
-    this.billerAccountNameInput        = page.locator('#Account_Name');
-    this.billerAmountInput             = page.locator('#Amount');
-    this.billerEmailInput              = page.locator('#email-optional');
-    this.confirmPaymentButton          = page.locator('#confirmPaymentButton');
+    // The first field differs per biller: Manila Water Company's is labeled
+    // "8 Digit Contract Account Number" (id "8_Digit_Contract_Account_Number_"),
+    // VECO's is labeled "11 Digit Account ID". The rest of the ECPay form
+    // (Account Name / Amount / Email) is identical. Match Manila Water's by id
+    // and VECO's by its accessible name so the shared paySuccessfully() flow
+    // works for both (VECO field confirmed live 2026-09-10).
+    this.contractAccountNumberInput    = page
+      .locator('[id="8_Digit_Contract_Account_Number_"]')
+      .or(page.getByRole('textbox', { name: '11 Digit Account ID' }));
+    // Manila Water Company matches these by id; VECO renders the same fields
+    // but only exposes them by accessible name/role (no usable id), so match
+    // either form so the shared paySuccessfully() flow works for both
+    // (VECO field names confirmed live 2026-09-10).
+    this.billerAccountNameInput        = page
+      .locator('#Account_Name')
+      .or(page.getByRole('textbox', { name: 'Account Name' }));
+    this.billerAmountInput             = page
+      .locator('#Amount')
+      .or(page.getByRole('spinbutton', { name: 'Amount' }));
+    this.billerEmailInput              = page
+      .locator('#email-optional')
+      .or(page.getByRole('textbox', { name: 'Email(Optional)' }));
+    this.confirmPaymentButton          = page
+      .locator('#confirmPaymentButton')
+      .or(page.getByRole('button', { name: 'Pay Now' }));
     this.paymentSummaryModalBody       = page.locator('#dynamicModalBody');
 
     this.genericAccountNumberInput     = page.getByRole('textbox', { name: 'Account Number', exact: true });
@@ -463,10 +483,50 @@ export class PaymentConsolePage {
     console.log('[PaymentConsolePage] Payment receipt verified');
   }
 
+  // Waits for the #myModal fade-in to fully finish (opacity settled at 1) so a
+  // screenshot isn't captured mid-transition — that's what makes the modal
+  // look ghosted/blurry over the page behind it. Falls back to a short fixed
+  // wait if opacity can't be read.
+  async waitForModalSettled() {
+    const modal = this.page.locator('#myModal');
+    await modal.waitFor({ state: 'visible' });
+    try {
+      await this.page.waitForFunction(
+        () => {
+          const el = (globalThis as any).document?.getElementById('myModal');
+          if (!el) return false;
+          const op = parseFloat((globalThis as any).getComputedStyle(el).opacity || '1');
+          return op >= 1;
+        },
+        undefined,
+        { timeout: 3000 },
+      );
+    } catch {
+      // opacity never reported 1 — fall through to a small settle wait.
+    }
+    await this.page.waitForTimeout(300);
+  }
+
+  // --- Screenshot targets ------------------------------------------------------
+  // Element locators for capturing just the relevant surface (used with
+  // attachScreenshot({ locator })), so screenshots are scoped and not clipped
+  // by the viewport.
+
+  // The Payment Summary modal (biller header + field rows incl. the fee
+  // breakdown: Bill Amount / Add-on Fee / Service Fee / Total Amount).
+  paymentSummaryLocator() {
+    return this.page.locator('#myModal');
+  }
+
+  // The post-Confirm "Payment Successful!" Transaction Receipt content.
+  receiptLocator() {
+    return this.page.locator('#dynamicReceiptContent');
+  }
+
   // Confirming an invalid account number or a duplicate transaction keeps
   // the Payment Summary modal open and shows the reason inline as a red
   // banner (confirmed live 2026-08-10, BLR-3682/3683 — no redirect anymore).
-  async assertPaymentRejected(expectedReason: string) {
+  async assertPaymentRejected(expectedReason: string | RegExp) {
     await expect(this.page.locator('#myModal'), 'Payment Summary modal should stay open on rejection').toBeVisible();
     await expect(
       this.page.locator('#myModal').getByText(expectedReason),
@@ -486,9 +546,16 @@ export class PaymentConsolePage {
   // failing. Short timeout since the rejection banner renders immediately on
   // Confirm — it's the success path (the receipt) that can be slow.
   async isDuplicateTransactionRejection(): Promise<boolean> {
+    // The app has TWO wordings for a duplicate rejection (both confirmed live):
+    //   1. "Transaction cannot be processed. System detects this to be a
+    //      double transaction." (BLR-3683)
+    //   2. "System detects double transaction for this account with the same
+    //      amount. To avoid duplicate payments please try again tomorrow or
+    //      try with a different amount." (confirmed live 2026-09-10)
+    // Match either — a regex on the common "double transaction" phrasing.
     try {
       await expect(
-        this.page.locator('#myModal').getByText('Transaction cannot be processed. System detects this to be a double transaction.')
+        this.page.locator('#myModal').getByText(/double transaction/i).first()
       ).toBeVisible({ timeout: 5000 });
       return true;
     } catch {

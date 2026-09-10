@@ -72,6 +72,104 @@ export class TransactionPage {
     await expect(row, 'Row should show the correct status').toContainText(details.status ?? 'Payment Posted');
     console.log('[TransactionPage] Transaction row verified');
   }
+
+  // The DataTable element — screenshot this (not the viewport) so the full,
+  // horizontally-scrolling table width is captured rather than clipped.
+  tableLocator() {
+    return this.transactionTable;
+  }
+
+  // --- View Transaction modal --------------------------------------------------
+  //
+  // Opens the per-row "View Transaction" modal (the eye icon, `.far.fa-eye`)
+  // for the row matching `merchantReference`. This modal shows the full,
+  // un-clipped transaction detail incl. the fee breakdown (Bill Amount /
+  // Add-on Fee / Service Fee / Total Amount) — a cleaner source than the wide
+  // table. The eye icon is scoped to the matched row so it can't open the
+  // wrong transaction. Amounts render PHP-prefixed (e.g. "PHP 34.00").
+
+  private viewModal() {
+    // The modal titled "View Transaction"; matched by the visible header so
+    // it's independent of a container id.
+    return this.page.locator('.modal, [role="dialog"]').filter({ hasText: 'View Transaction' }).first();
+  }
+
+  async viewTransaction(merchantReference: string) {
+    const row = this.transactionTable.locator('tbody tr', { hasText: merchantReference });
+    await expect(row, 'Transaction row should be present before opening its View modal').toBeVisible();
+    await row.locator("//i[@class='far fa-eye']").click();
+    await expect(this.viewModal(), 'View Transaction modal should open').toBeVisible({ timeout: 20000 });
+    // Let the modal fade-in settle so a screenshot isn't captured mid-transition
+    // (ghosted over the page behind it).
+    await this.page.waitForTimeout(500);
+    console.log(`[TransactionPage] Opened View Transaction modal for ${merchantReference}`);
+  }
+
+  // Verifies the fee breakdown + key details in the open View Transaction
+  // modal. Amounts are matched with the "PHP " prefix the modal renders.
+  // Pass only what you want to assert; omitted fields are skipped.
+  async assertTransactionDetails(details: {
+    billerName?: string;      // viewServiceProviderName
+    processor?: string;       // viewProcessorName
+    merchantReference?: string; // viewMerchantReference (Business Reference)
+    accountNumber?: string;   // accountNumber
+    billAmount?: string;      // viewBillAmount   (e.g. "24.00")
+    addOnFee?: string;        // viewAddOnFee
+    serviceFee?: string;      // viewServiceFee
+    totalAmount?: string;     // viewTotalAmount
+    integratorMessage?: string; // viewIntegratorMessage
+    statusDescription?: string; // viewStatusDescription
+  }) {
+    // Every field is a disabled <input> — its content is in the `value`
+    // attribute, not text content — so assert with toHaveValue, and amounts
+    // render PHP-prefixed (e.g. "PHP 34.00"). Confirmed live 2026-09-10.
+    const php = (v: string) => `PHP ${v}`;
+    const checks: Array<[string, string | undefined, boolean]> = [
+      ['#viewServiceProviderName', details.billerName, false],
+      ['#viewProcessorName', details.processor, false],
+      ['#viewMerchantReference', details.merchantReference, false],
+      ['#accountNumber', details.accountNumber, false],
+      ['#viewBillAmount', details.billAmount, true],
+      ['#viewAddOnFee', details.addOnFee, true],
+      ['#viewServiceFee', details.serviceFee, true],
+      ['#viewTotalAmount', details.totalAmount, true],
+      ['#viewIntegratorMessage', details.integratorMessage, false],
+      ['#viewStatusDescription', details.statusDescription, false],
+    ];
+    const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    for (const [selector, value, isAmount] of checks) {
+      if (value === undefined) continue;
+      const expected = isAmount ? php(value) : value;
+      // The account-number field's id varies (given as `accountNumber`, but
+      // the live modal uses `viewAccountNumber` alongside the other view*
+      // fields). Match either, scoped to the modal, so we don't depend on one.
+      const locator =
+        selector === '#accountNumber'
+          ? this.viewModal().locator('#viewAccountNumber, #accountNumber, [name="accountNumber"]').first()
+          : this.page.locator(selector);
+      // Contains-match (tolerant of surrounding whitespace in the input value).
+      await expect(
+        locator,
+        `View Transaction modal should show ${selector} = ${expected}`,
+      ).toHaveValue(new RegExp(escapeRe(expected)));
+    }
+    console.log('[TransactionPage] View Transaction details verified');
+  }
+
+  // The modal's scrollable body — the element that actually scrolls (the outer
+  // .modal is a fixed-height backdrop). Playwright element screenshots expand a
+  // scrollable element to its FULL height, capturing the whole transaction
+  // detail (fee breakdown + the lower Transaction Details section) top-to-
+  // bottom without clipping, regardless of what's visible. Falls back through
+  // likely Bootstrap container classes.
+  viewModalLocator() {
+    const modal = this.viewModal();
+    return modal.locator('.modal-body, .modal-content').first();
+  }
+
+  async closeViewTransaction() {
+    await this.viewModal().getByRole('button', { name: /close|×/i }).first().click().catch(() => {});
+  }
 }
 
 export default TransactionPage;

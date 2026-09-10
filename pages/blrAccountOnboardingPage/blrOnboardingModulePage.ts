@@ -379,8 +379,21 @@ export class OnboardModulePage {
     // yet queryable on the slow test env, and a filtered "no results" table
     // never refreshes on its own — only a reload + fresh search picks the new
     // row up once the backend catches up.
+    // The row can take a while to become queryable after creation on the slow
+    // test env — confirmed live 2026-09-09 that the merchant DOES land in the
+    // table, just later than the old 3-attempt budget allowed (every
+    // create-then-read test failed with "No Merchants" while the row was
+    // visible in the UI moments later), and slower still under parallel
+    // workers hammering the shared env.
+    //
+    // Retry with a SHORT per-attempt row wait (not a long one) so many cheap
+    // reload+search cycles fit inside the test's overall timeout — a long
+    // per-attempt wait plus growing sleeps overran the 180s test budget
+    // (BLR-2716). The reload itself is the expensive part; keep the row wait
+    // tight and just do more passes. Total worst case ≈ 8 × (reload + ~5s).
+    const MAX_ATTEMPTS = 8;
     let rowVisible = false;
-    for (let attempt = 1; attempt <= 3 && !rowVisible; attempt++) {
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS && !rowVisible; attempt++) {
       await this.page.reload({ waitUntil: 'domcontentloaded' });
       await table.waitFor({ state: 'visible', timeout: 60_000 });
       // pressSequentially, not fill(): the table search listens on keystrokes,
@@ -388,12 +401,12 @@ export class OnboardModulePage {
       await searchBox.clear();
       await searchBox.pressSequentially(businessName, { delay: 100 });
       rowVisible = await targetRow
-        .waitFor({ state: 'visible', timeout: 20_000 })
+        .waitFor({ state: 'visible', timeout: 5_000 })
         .then(() => true)
         .catch(() => false);
     }
     if (!rowVisible) {
-      throw new Error(`Merchant "${businessName}" not found in onboarding table after 3 reload attempts`);
+      throw new Error(`Merchant "${businessName}" not found in onboarding table after ${MAX_ATTEMPTS} reload attempts`);
     }
 
     // Build a header → column index map

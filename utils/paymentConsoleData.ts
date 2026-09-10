@@ -46,7 +46,7 @@ export const paymentConsoleContext = {
 
 export type BillerConfig = {
   name: string;
-  processor: 'ECPay' | 'Bayad';
+  processor: 'ECPay' | 'Bayad' | 'SSS';
   accountNumbers: string[];
   // Flat add-on fee (₱) charged on top of the bill amount, per the Payment
   // Summary breakdown (confirmed live 2026-08-10). Service fee is always
@@ -77,7 +77,11 @@ export const billers: Record<string, BillerConfig> = {
   visayanElectric: {
     name: 'VISAYAN ELECTRIC COMPANY',
     processor: 'ECPay',
-    accountNumbers: ['99999200001'],
+    // '99999200001' kept first as the stable default (confirmed working live
+    // 2026-09-10). The rest are fallback test accounts — paySuccessfully()
+    // swaps to the next untried one if a transaction is rejected as a duplicate
+    // (ECPay's duplicate check is keyed by account number + amount).
+    accountNumbers: ['99999200001', '99999100003', '99998067096'],
     addOnFee: 9,
   },
 };
@@ -100,6 +104,75 @@ export const bayadBillers: Record<string, BillerConfig> = {
     processor: 'Bayad',
     accountNumbers: ['62725870'],
     addOnFee: 10,
+  },
+  // BAYAD "MANILA WATER" (Water Utility) — distinct from the ECPay "MANILA
+  // WATER COMPANY" biller in the `billers` registry above. This one renders
+  // the plain generic Bayad form (Account Number + Amount + Email(Optional),
+  // no Account Name field), so it reuses the generic* helpers same as
+  // Maynilad/Meralco. Stood up as the active Bayad pay-flow biller while
+  // Meralco is hitting its monthly transaction limit (2026-09-09).
+  // Account number, addOnFee (10), and full receipt confirmed live 2026-09-10
+  // via the Payment Summary and on-screen receipt.
+  manilaWater: {
+    name: 'MANILA WATER',
+    processor: 'Bayad',
+    accountNumbers: ['12358959'],
+    addOnFee: 10,
+  },
+  // MERALCO renders the plain generic Bayad form (Account Number + Amount +
+  // Email(Optional), no Account Name field — confirmed live via the Payment
+  // Console Transaction form), so it reuses the generic* helpers same as
+  // Maynilad. Account number, add-on fee, and full receipt (incl. Account
+  // Number rendering correctly, unlike ECPay) confirmed live 2026-09-08 via
+  // the Payment Summary, on-screen/email receipt, and Transaction List.
+  meralco: {
+    name: 'MERALCO',
+    processor: 'Bayad',
+    // '3534336838' confirmed working live 2026-09-08 (full receipt + email +
+    // Transaction List) — kept first as the stable default. The rest are
+    // fallback test accounts to swap in if the default stops working.
+    accountNumbers: [
+      '3534336838',
+      '0001026161',
+      '0001037138',
+      '0001062272',
+      '0001102624',
+      '0001172487',
+      '1521485412',
+      '1764147971',
+      '1840507879',
+      '1889810564',
+    ],
+    addOnFee: 0,
+  },
+};
+
+// ==============================================================================
+// SSS BILLERS — separate registry, separate suite (tests/platform/
+// Payment Console/SSS/*.spec.ts)
+// ==============================================================================
+// Third processor alongside ECPay and Bayad. Two billers in the search
+// directory — "SSS - Individual" and "SSS - Employer" — reached through the
+// same Payment Console selection flow (business name -> biller account ->
+// service type -> search -> select).
+//
+// NOTE: the biller-specific payment form fields for SSS are NOT captured yet
+// (Individual and Employer likely differ, and both differ from Manila
+// Water's ECPay form). accountNumbers/addOnFee are placeholders until the
+// form is explored live — the current specs only navigate to and select the
+// biller, they don't fill or submit the form.
+export const sssBillers: Record<string, BillerConfig> = {
+  individual: {
+    name: 'SSS - Individual',
+    processor: 'SSS',
+    accountNumbers: [],
+    addOnFee: 0,
+  },
+  employer: {
+    name: 'SSS - Employer',
+    processor: 'SSS',
+    accountNumbers: [],
+    addOnFee: 0,
   },
 };
 
@@ -144,10 +217,18 @@ export const randomAccountName = (): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
-// ₱5.00 up to ₱10.00 — wallet balance is nearly exhausted (2026-08-10), so
-// keep test payment amounts minimal to conserve what's left.
-export const randomBillAmount = (): string =>
-  (Math.floor(Math.random() * (10 - 5 + 1)) + 5).toFixed(2);
+// A low base peso (₱5–₱7) plus RANDOM CENTS (.00–.99), e.g. 5.23 / 6.41 / 7.08.
+// ECPay's duplicate-transaction check is keyed by account number + amount, so
+// the old fixed ₱6/₱11/₱13 pool collided easily and got runs rejected as
+// duplicates (see paySuccessfully's retry-with-next-account fallback). The
+// cents make each run's amount effectively unique (~300 combinations) so the
+// same account number no longer trips that check. Base kept low because wallet
+// balance is nearly exhausted (2026-08-10) — conserve what's left.
+export const randomBillAmount = (): string => {
+  const pesos = Math.floor(Math.random() * (7 - 5 + 1)) + 5; // 5..7
+  const cents = Math.floor(Math.random() * 100);             // 0..99
+  return (pesos + cents / 100).toFixed(2);
+};
 
 // Bayad enforces a Php20.00 minimum ("The minimum amount for payments must
 // be at least Php20.00" — confirmed live 2026-09-01) — higher than ECPay's
