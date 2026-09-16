@@ -336,28 +336,39 @@ export class PaymentConsolePage {
   // so fill() — which doesn't dispatch real key events — silently produces no
   // results. Type it out for real (see bayadPage.ts for the equivalent fix).
   //
-  // Results differ by role (confirmed live 2026-09-15):
+  // Results differ by role (confirmed live 2026-09-15/16):
   //   - Admin console renders filtered results inside #searchInput, and the
-  //     link text equals the biller name exactly.
-  //   - Merchant/agent console renders the billers as links in the directory
-  //     (not #searchInput), and the link text is the fuller OFFICIAL name
-  //     (e.g. search "MAYNILAD WATER" → link "MAYNILAD WATER SERVICES";
-  //     "MANILA WATER" → "MANILA WATER COMPANY").
-  // So match a biller link by NAME-AS-SUBSTRING (not exact) at the PAGE level
-  // (not scoped to #searchInput), taking the first visible match. Works for
-  // both roles.
-  private billerLink(name: string) {
+  //     link text equals the biller name EXACTLY. Crucially, the directory has
+  //     BOTH a Bayad "MANILA WATER" and an ECPay "MANILA WATER COMPANY", so a
+  //     loose substring match on "MANILA WATER" wrongly grabs the ECPay one
+  //     (regression seen 2026-09-16).
+  //   - Merchant/agent console renders billers as directory links whose text
+  //     is the fuller OFFICIAL name (search "MAYNILAD WATER" → link
+  //     "MAYNILAD WATER SERVICES"; "MANILA WATER" → "MANILA WATER COMPANY").
+  // So: prefer an EXACT link match; only fall back to substring when no exact
+  // link exists. This keeps admin's Bayad "MANILA WATER" distinct from ECPay's
+  // "MANILA WATER COMPANY", while still resolving the merchant's fuller names.
+  private async resolveBillerLink(name: string) {
+    const exact = this.page.getByRole('link', { name, exact: true }).first();
+    if (await exact.count().then((c) => c > 0).catch(() => false)) {
+      return exact;
+    }
     return this.page.getByRole('link', { name, exact: false }).first();
   }
 
   async searchBillerAccount(searchTerm: string) {
     await this.billerSearchInput.pressSequentially(searchTerm, { delay: 80 });
-    await this.billerLink(searchTerm).waitFor({ state: 'visible' });
+    // Wait until a match (exact preferred) is visible before selecting.
+    await expect(async () => {
+      const link = await this.resolveBillerLink(searchTerm);
+      await expect(link).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 45_000 });
     console.log(`[PaymentConsolePage] Searched for biller: ${searchTerm}`);
   }
 
   async selectBillerAccount(billerName: string) {
-    await this.billerLink(billerName).click();
+    const link = await this.resolveBillerLink(billerName);
+    await link.click();
     await this.page.waitForLoadState('networkidle');
     console.log(`[PaymentConsolePage] Selected biller: ${billerName}`);
   }
@@ -509,7 +520,11 @@ export class PaymentConsolePage {
     serviceFee: string;
     totalAmount: string;
   }) {
-    await expect(this.receiptHeading, 'Payment Successful! receipt should render').toBeVisible({ timeout: 30000 });
+    // The backend is intermittently slow to process the payment after Confirm
+    // — the receipt sits on a disabled "Loading..." spinner well past 30s
+    // (confirmed live 2026-09-16). Wait up to 75s for the receipt to render
+    // before treating it as a genuine hang.
+    await expect(this.receiptHeading, 'Payment Successful! receipt should render').toBeVisible({ timeout: 75_000 });
     await expect(this.serviceProviderValue, 'Receipt should show the biller name').toHaveText(details.billerName);
     await expect(this.statusCodeValue, 'Receipt should show Payment Posted status').toHaveText('Payment Posted');
     await expect(this.accountNumberValue, 'Receipt should show the contract account number').toHaveText(details.accountNumber);
@@ -602,6 +617,51 @@ export class PaymentConsolePage {
     } catch {
       return false;
     }
+  }
+
+  // Post-Confirm, some rejections don't stay inline — the app REDIRECTS to
+  // /payment-console-status-error (e.g. statusCode ER.00.05 "Kindly check if
+  // the account number …"), confirmed live 2026-09-16 when an account number
+  // gets flagged mid-run. This is a real rejection, not the backend hang, and
+  // like the duplicate banner it means "retry with a different account". Detect
+  // it by the URL so paySuccessfully can fall back instead of waiting out the
+  // 30s receipt timeout.
+  async isErrorPageRejection(): Promise<boolean> {
+    try {
+      await this.page.waitForURL(/payment-console-status-error/, { timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // After Confirm, wait for WHICHEVER of the three outcomes lands first:
+  //   'receipt'    — the success receipt rendered
+  //   'duplicate'  — inline duplicate-transaction banner (retry next account)
+  //   'error-page' — redirect to /payment-console-status-error (retry next)
+  //   'unknown'    — none within the timeout (the backend post-Confirm hang)
+  async awaitPostConfirmOutcome(): Promise<'receipt' | 'duplicate' | 'error-page' | 'unknown'> {
+    // The backend can be slow to render the receipt (stuck on a "Loading..."
+    // spinner) — wait up to 75s for the success path. Duplicate banner and the
+    // error-page redirect still resolve within the loop as soon as they appear,
+    // so this longer deadline only affects how long we're patient for success.
+    const deadline = Date.now() + 75_000;
+    while (Date.now() < deadline) {
+      if (await this.receiptHeading.isVisible().catch(() => false)) return 'receipt';
+      if (this.page.url().includes('payment-console-status-error')) return 'error-page';
+      if (
+        await this.page
+          .locator('#myModal')
+          .getByText(/double transaction/i)
+          .first()
+          .isVisible()
+          .catch(() => false)
+      ) {
+        return 'duplicate';
+      }
+      await this.page.waitForTimeout(500);
+    }
+    return 'unknown';
   }
 
   async getMerchantReferenceNumber(): Promise<string> {

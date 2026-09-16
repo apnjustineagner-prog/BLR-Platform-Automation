@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Payment Console — Slow Response After Confirm</title>
+<style>
+  :root {
+    --green: #16a34a;
+    --green-dark: #15803d;
+    --red: #dc2626;
+    --amber: #d97706;
+    --ink: #1f2937;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --bg: #f7f8fa;
+    --card: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 32px 24px 64px; }
+  header {
+    border-left: 5px solid var(--green);
+    padding: 4px 0 4px 16px;
+    margin-bottom: 8px;
+  }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 32px 0 12px; border-bottom: 2px solid var(--line); padding-bottom: 6px; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 14px 0 4px; font-size: 13px; color: var(--muted); }
+  .meta b { color: var(--ink); font-weight: 600; }
+  .pill {
+    display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 10px;
+    border-radius: 999px; background: #fef2f2; color: var(--red); border: 1px solid #fecaca;
+  }
+
+  /* stat cards */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 18px 0; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; text-align: center; }
+  .stat .n { font-size: 26px; font-weight: 700; color: var(--green-dark); }
+  .stat .n.warn { color: var(--amber); }
+  .stat .n.bad { color: var(--red); }
+  .stat .l { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin: 14px 0; }
+
+  /* flow diagram */
+  .flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+  .step {
+    flex: 1; min-width: 92px; text-align: center; padding: 12px 8px; border-radius: 10px;
+    background: #f0fdf4; border: 1px solid #bbf7d0; position: relative; font-size: 12.5px; font-weight: 600;
+  }
+  .step .t { font-size: 11px; color: var(--muted); font-weight: 500; margin-top: 3px; }
+  .step.ok { background: #f0fdf4; border-color: #bbf7d0; }
+  .step.hang { background: #fef2f2; border-color: #fecaca; color: var(--red); }
+  .arrow { align-self: center; padding: 0 6px; color: var(--muted); font-weight: 700; }
+
+  /* timing bars */
+  .bars { margin-top: 6px; }
+  .bar-row { display: grid; grid-template-columns: 190px 1fr 70px; align-items: center; gap: 12px; margin: 9px 0; }
+  .bar-row .name { font-size: 13px; }
+  .track { background: #eef1f4; border-radius: 6px; height: 20px; position: relative; overflow: hidden; }
+  .fill { height: 100%; border-radius: 6px; }
+  .fill.ok { background: var(--green); }
+  .fill.slow { background: var(--amber); }
+  .fill.bad { background: var(--red); }
+  .bar-row .val { font-size: 12.5px; color: var(--muted); text-align: right; }
+  .scale { display:flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin: 4px 0 0 202px; }
+
+  pre {
+    background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 10px;
+    font: 12.5px/1.55 "SF Mono", Menlo, Consolas, monospace; overflow-x: auto;
+  }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: middle; }
+  ul.tight { margin: 6px 0; padding-left: 20px; }
+  ul.tight li { margin: 4px 0; }
+  .ask { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px 20px; }
+  .ask ol { margin: 6px 0; padding-left: 20px; }
+  .ask li { margin: 7px 0; }
+  footer { margin-top: 32px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; }
+  .note { font-size: 13px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 12px 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Payment Console — Slow / Hanging Response After Confirm</h1>
+    <div class="sub">QA Automation findings for Dev review</div>
+  </header>
+
+  <div class="meta">
+    <span><b>Environment:</b> test-web-admin.billeroo.com (Test)</span>
+    <span><b>Area:</b> Payment Console → Confirm → Receipt</span>
+    <span><b>Processors:</b> ECPay &amp; Bayad</span>
+    <span><b>Observed:</b> 2026-09-16</span>
+    <span class="pill">Severity: High (flaky)</span>
+  </div>
+
+  <h2>The problem in one line</h2>
+  <div class="card">
+    After clicking <b>Confirm</b>, the app intermittently sticks on a disabled
+    <b>“Loading…”</b> spinner and does not render the Transaction Receipt for
+    <b>30–75+ seconds</b> (sometimes never in a single attempt). The identical
+    payment succeeds on retry, so the data is valid — the delay is in the
+    <b>backend response after Confirm</b>.
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="n bad">&gt;75s</div><div class="l">Worst observed wait before receipt</div></div>
+    <div class="stat"><div class="n">~3–5s</div><div class="l">Expected receipt render</div></div>
+    <div class="stat"><div class="n warn">Retry</div><div class="l">Same data succeeds later</div></div>
+    <div class="stat"><div class="n">2+</div><div class="l">Billers affected (MWC, VECO)</div></div>
+  </div>
+
+  <h2>Where it hangs (payment flow)</h2>
+  <div class="card">
+    <div class="flow">
+      <div class="step ok">Select Biller<div class="t">ok</div></div>
+      <div class="arrow">→</div>
+      <div class="step ok">Fill + Pay Now<div class="t">ok</div></div>
+      <div class="arrow">→</div>
+      <div class="step ok">Payment Summary<div class="t">values correct</div></div>
+      <div class="arrow">→</div>
+      <div class="step ok">Confirm<div class="t">clicked</div></div>
+      <div class="arrow">→</div>
+      <div class="step hang">Receipt<div class="t">⚠ stuck “Loading…”</div></div>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:#16a34a"></span>Works reliably</span>
+      <span><span class="dot" style="background:#dc2626"></span>Hangs after Confirm</span>
+    </div>
+  </div>
+
+  <h2>Timing — expected vs. observed</h2>
+  <div class="card">
+    <div class="bars">
+      <div class="bar-row">
+        <span class="name">Expected receipt render</span>
+        <div class="track"><div class="fill ok" style="width:5%"></div></div>
+        <span class="val">~3–5s</span>
+      </div>
+      <div class="bar-row">
+        <span class="name">Old automation wait (timed out)</span>
+        <div class="track"><div class="fill slow" style="width:40%"></div></div>
+        <span class="val">30s</span>
+      </div>
+      <div class="bar-row">
+        <span class="name">New automation wait</span>
+        <div class="track"><div class="fill slow" style="width:100%"></div></div>
+        <span class="val">75s</span>
+      </div>
+      <div class="bar-row">
+        <span class="name">Observed hang (no receipt)</span>
+        <div class="track"><div class="fill bad" style="width:100%"></div></div>
+        <span class="val">&gt;75s</span>
+      </div>
+    </div>
+    <div class="scale"><span>0s</span><span>~75s</span></div>
+    <p class="sub" style="margin-top:12px">
+      We raised the automation wait from 30s → 75s to absorb the slowness; even
+      75s is occasionally not enough, which is why this is a backend concern, not
+      just a test-timeout tweak.
+    </p>
+  </div>
+
+  <h2>Evidence — DOM captured at the hang</h2>
+  <div class="card">
+    <p class="sub" style="margin-top:0">At timeout, the submit control is stuck loading — no receipt, no error, no redirect:</p>
+    <pre>button "Loading..." [disabled]
+  - status
+  - text: Loading...</pre>
+    <p class="sub">
+      Distinct from a real rejection: when an account is genuinely rejected the
+      app <b>redirects</b> to <code>/payment-console-status-error?statusCode=ER.00.05</code>.
+      The hang has no error and no redirect — the request is simply still pending.
+    </p>
+  </div>
+
+  <h2>Impact</h2>
+  <div class="card">
+    <ul class="tight">
+      <li><b>Automation:</b> e2e Payment Console tests flake — the receipt gates
+        every later step (Transaction List, View Transaction modal, email receipt).
+        Mitigated with 75s waits + retries, which slows the suite and masks the issue.</li>
+      <li><b>Potential real users:</b> if Confirm routinely takes this long, users
+        may think the payment stalled, retry, and risk <b>duplicate submissions</b>.</li>
+    </ul>
+  </div>
+
+  <h2>What we need from Dev</h2>
+  <div class="ask">
+    <ol>
+      <li>How long does the <b>payment-processing call after Confirm</b> (ECPay/Bayad
+        submission) take on the test env? Any known slow dependency (processor
+        round-trip, DB, queue)?</li>
+      <li>Is there a case where the request <b>never resolves</b> and the spinner
+        stays indefinitely? If so, the UI should time out and show an error rather
+        than spin forever.</li>
+      <li>Is this <b>test-infra slowness</b> (under-provisioned servers / throttled
+        processor sandbox) or an app-level issue that would also hit production?</li>
+      <li>What is the expected <b>SLA</b> for Confirm → receipt so we can set a
+        correct automation timeout?</li>
+    </ol>
+  </div>
+
+  <div class="note" style="margin-top:16px">
+    <b>Note on framing:</b> This is framed as slow <i>backend response</i>, not
+    client internet. The consistent “Loading…” spinner + success-on-retry with
+    identical data points to the server taking long to respond rather than a
+    connectivity drop. Client-side network hasn’t been formally ruled out —
+    confirming the server-side timing above would settle it.
+  </div>
+
+  <footer>
+    Prepared by QA Automation from live Playwright runs on the Test environment, 2026-09-16.
+  </footer>
+
+</div>
+</body>
+</html>

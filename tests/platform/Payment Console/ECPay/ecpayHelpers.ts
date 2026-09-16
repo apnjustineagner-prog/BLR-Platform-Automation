@@ -187,16 +187,32 @@ export async function paySuccessfully(
       await paymentConsole.clickConfirm();
     });
 
-    if (!(await paymentConsole.isDuplicateTransactionRejection())) break;
+    // Post-Confirm, the app can (a) render the receipt, (b) reject inline as a
+    // duplicate, or (c) redirect to the ER.00.05 error page when the account
+    // number is flagged (confirmed live 2026-09-16). Both (b) and (c) mean
+    // "this account won't work — try the next one"; (a) is success.
+    const outcome = await paymentConsole.awaitPostConfirmOutcome();
+    if (outcome === 'receipt') break;
+
+    if (outcome === 'unknown') {
+      // Neither success nor a known rejection appeared — the backend
+      // post-Confirm hang. Let the test-level retry re-run the whole flow.
+      throw new Error(
+        `[ecpay] No receipt or rejection after Confirm for ${biller.name} (${accountNumber}) — backend hang.`,
+      );
+    }
 
     const nextAccountNumber = biller.accountNumbers.find((n) => !triedAccountNumbers.has(n));
     if (!nextAccountNumber) {
       throw new Error(
-        `Every account number for ${biller.name} was rejected as a duplicate transaction — no fallback left to retry.`
+        `Every account number for ${biller.name} was rejected (${outcome}) — no fallback left to retry.`
       );
     }
-    console.log(`[ecpay] ${accountNumber} rejected as a duplicate transaction, retrying with ${nextAccountNumber}`);
+    console.log(`[ecpay] ${accountNumber} rejected (${outcome}), retrying with ${nextAccountNumber}`);
     accountNumber = nextAccountNumber;
+    // The next loop iteration calls navigateAndSelectBiller() →
+    // goToPaymentConsole(), which navigates back to the console, so an
+    // error-page redirect recovers on its own.
   }
 
   const merchantReference = await test.step('Verify payment receipt', async () => {
