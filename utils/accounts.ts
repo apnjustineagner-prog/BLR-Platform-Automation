@@ -39,6 +39,8 @@ export type PaymentConsoleContext = {
   email: string;
 };
 
+export type Processor = 'ECPay' | 'Bayad' | 'SSS';
+
 export type TestAccount = {
   // Short key used for TEST_ACCOUNT and the storageState filename.
   key: string;
@@ -51,6 +53,11 @@ export type TestAccount = {
   // In-app Payment Console selections for this account. Different roles may
   // see different businesses/credentials in their dropdowns.
   paymentConsoleContext: PaymentConsoleContext;
+  // Which payment processors this account's Biller Account credential can run.
+  // Determined by the credentials visible in the account's Biller Account
+  // dropdown — e.g. Main Merchant only has ECPAY CREDS, so it's ECPay-only.
+  // Suites for a processor the account doesn't support are skipped.
+  processors: Processor[];
 };
 
 // The email the receipts/OTP go to — shared across accounts for now.
@@ -74,6 +81,8 @@ export const accounts: Record<string, TestAccount> = {
     password: adminCredentials.password,
     storageStateFile: 'storageState.json',
     paymentConsoleContext: { ...DEFAULT_CONTEXT },
+    // Admin has ECPay, Bayad, and SSS credentials.
+    processors: ['ECPay', 'Bayad', 'SSS'],
   },
   mainMerchant: {
     key: 'mainMerchant',
@@ -90,6 +99,10 @@ export const accounts: Record<string, TestAccount> = {
       serviceType: 'Bills Payment',
       email: RECEIPT_EMAIL,
     },
+    // Main Merchant's Biller Account dropdown shows only ECPAY CREDS — no Bayad
+    // or SSS credential — so it can only run ECPay billers (confirmed live
+    // 2026-09-15). Bayad/SSS suites are skipped for this account.
+    processors: ['ECPay'],
   },
   subMerchant: {
     key: 'subMerchant',
@@ -98,6 +111,8 @@ export const accounts: Record<string, TestAccount> = {
     password: 'SubLevel01Password321!1',
     storageStateFile: 'storageState.subMerchant.json',
     paymentConsoleContext: { ...DEFAULT_CONTEXT },
+    // TODO: confirm which credentials Sub Merchant has; assume ECPay for now.
+    processors: ['ECPay'],
   },
   mainAgent: {
     key: 'mainAgent',
@@ -106,6 +121,8 @@ export const accounts: Record<string, TestAccount> = {
     password: 'Qwertymeow!2',
     storageStateFile: 'storageState.mainAgent.json',
     paymentConsoleContext: { ...DEFAULT_CONTEXT },
+    // TODO: confirm which credentials Main Agent has; assume ECPay for now.
+    processors: ['ECPay'],
   },
   subAgent: {
     key: 'subAgent',
@@ -114,6 +131,8 @@ export const accounts: Record<string, TestAccount> = {
     password: 'Qwertymeow!2',
     storageStateFile: 'storageState.subAgent.json',
     paymentConsoleContext: { ...DEFAULT_CONTEXT },
+    // TODO: confirm which credentials Sub Agent has; assume ECPay for now.
+    processors: ['ECPay'],
   },
 };
 
@@ -155,4 +174,11 @@ export function activeAccount(): TestAccount {
 //   const account = accountForProject(test.info().project.name);
 export function accountForProject(projectName: string): TestAccount {
   return accountForKey(accountKeyFromProjectName(projectName));
+}
+
+// Whether the account running under this project supports a given processor.
+// Use to skip a processor's suite for accounts that lack its credential:
+//   test.skip(!projectSupports(test.info().project.name, 'Bayad'), 'reason');
+export function projectSupports(projectName: string, processor: Processor): boolean {
+  return accountForProject(projectName).processors.includes(processor);
 }

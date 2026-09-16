@@ -51,9 +51,20 @@ export class TransactionPage {
 
   // Filling the search box alone doesn't filter — Apply Filter has to be
   // clicked to actually run the search (confirmed via codegen 2026-07-23).
+  //
+  // Apply Filter occasionally doesn't take on the first click — the table
+  // stays empty (Total Amount Php 0.00, no rows) even with the reference typed
+  // in (observed live 2026-09-16). So re-click Apply Filter until the matching
+  // row appears, rather than clicking once and hoping. The reference is unique
+  // per transaction, so the row's presence is the reliable "filter applied"
+  // signal.
   async searchByReference(value: string) {
     await this.searchByReferenceInput.fill(value);
-    await this.applyFilterButton.click();
+    const row = this.transactionTable.locator('tbody tr', { hasText: value });
+    await expect(async () => {
+      await this.applyFilterButton.click();
+      await expect(row).toBeVisible({ timeout: 5_000 });
+    }).toPass({ timeout: 45_000 });
     console.log(`[TransactionPage] Searched by reference: ${value}`);
   }
 

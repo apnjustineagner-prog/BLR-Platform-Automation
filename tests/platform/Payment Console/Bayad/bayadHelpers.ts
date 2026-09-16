@@ -36,7 +36,7 @@ import {
   computeTotalAmount,
   SERVICE_FEE,
 } from '../../../../utils/paymentConsoleData';
-import { accountForProject, type PaymentConsoleContext } from '../../../../utils/accounts';
+import { accountForProject, projectSupports, type PaymentConsoleContext } from '../../../../utils/accounts';
 import { attachScreenshot } from '../../../../utils/attachScreenshot';
 import { logTransactionSummary } from '../../../../utils/logTransactionSummary';
 import { applyZoom } from '../../../../utils/applyZoom';
@@ -74,6 +74,12 @@ export function registerBayadHooks() {
   test.describe.configure({ retries: 2 });
 
   test.beforeEach(async ({ page }, testInfo) => {
+    // Skip Bayad specs for accounts whose Biller Account has no Bayad
+    // credential (e.g. Main Merchant is ECPay-only) — they can't run this flow.
+    test.skip(
+      !projectSupports(testInfo.project.name, 'Bayad'),
+      `${testInfo.project.name} has no Bayad credential — skipping Bayad suite`,
+    );
     bayadState.paymentConsole = new PaymentConsolePage(page);
     bayadState.transactionPage = new TransactionPage(page);
     bayadState.currentQaseId = 0;

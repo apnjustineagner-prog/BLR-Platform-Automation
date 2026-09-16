@@ -22,7 +22,7 @@
 import { test } from '@playwright/test';
 import { PaymentConsolePage } from '../../../../pages/PLATFORM(SUPERADMIN)/paymentConsolePage';
 import { paymentConsoleContext, sssBillers, BillerConfig } from '../../../../utils/paymentConsoleData';
-import { accountForProject, type PaymentConsoleContext } from '../../../../utils/accounts';
+import { accountForProject, projectSupports, type PaymentConsoleContext } from '../../../../utils/accounts';
 import { attachScreenshot } from '../../../../utils/attachScreenshot';
 import { applyZoom } from '../../../../utils/applyZoom';
 
@@ -34,6 +34,11 @@ test.describe.configure({ retries: 2 });
 let paymentConsole: PaymentConsolePage;
 
 test.beforeEach(async ({ page }, testInfo) => {
+  // Skip SSS specs for accounts with no SSS credential.
+  test.skip(
+    !projectSupports(testInfo.project.name, 'SSS'),
+    `${testInfo.project.name} has no SSS credential — skipping SSS suite`,
+  );
   paymentConsole = new PaymentConsolePage(page);
   context = accountForProject(testInfo.project.name).paymentConsoleContext;
   await applyZoom(page, 0.5); // zoom out to 50% so wide tables/modals fit

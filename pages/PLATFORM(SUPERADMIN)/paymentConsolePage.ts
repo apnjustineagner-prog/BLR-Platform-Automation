@@ -335,14 +335,29 @@ export class PaymentConsolePage {
   // type was selected); this search filters it locally via a keyup handler,
   // so fill() — which doesn't dispatch real key events — silently produces no
   // results. Type it out for real (see bayadPage.ts for the equivalent fix).
+  //
+  // Results differ by role (confirmed live 2026-09-15):
+  //   - Admin console renders filtered results inside #searchInput, and the
+  //     link text equals the biller name exactly.
+  //   - Merchant/agent console renders the billers as links in the directory
+  //     (not #searchInput), and the link text is the fuller OFFICIAL name
+  //     (e.g. search "MAYNILAD WATER" → link "MAYNILAD WATER SERVICES";
+  //     "MANILA WATER" → "MANILA WATER COMPANY").
+  // So match a biller link by NAME-AS-SUBSTRING (not exact) at the PAGE level
+  // (not scoped to #searchInput), taking the first visible match. Works for
+  // both roles.
+  private billerLink(name: string) {
+    return this.page.getByRole('link', { name, exact: false }).first();
+  }
+
   async searchBillerAccount(searchTerm: string) {
     await this.billerSearchInput.pressSequentially(searchTerm, { delay: 80 });
-    await this.billerSearchResults.getByRole('link', { name: searchTerm, exact: true }).waitFor({ state: 'visible' });
+    await this.billerLink(searchTerm).waitFor({ state: 'visible' });
     console.log(`[PaymentConsolePage] Searched for biller: ${searchTerm}`);
   }
 
   async selectBillerAccount(billerName: string) {
-    await this.billerSearchResults.getByRole('link', { name: billerName, exact: true }).click();
+    await this.billerLink(billerName).click();
     await this.page.waitForLoadState('networkidle');
     console.log(`[PaymentConsolePage] Selected biller: ${billerName}`);
   }
