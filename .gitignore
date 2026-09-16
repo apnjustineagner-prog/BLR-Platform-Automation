@@ -5,6 +5,8 @@ storageState.json
 storageState.*.json
 .env
 logs/log.txt
+logs/run-*.log
+logs/latest-run.log
 utils/key.json
 screenshots/
 .DS_Store

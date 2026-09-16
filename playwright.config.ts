@@ -146,6 +146,9 @@ export default defineConfig({
   // Reporters — where test results go
   reporter: [
     ['list'],
+    // Writes a human-readable "why did it fail" summary per run to
+    // logs/run-<timestamp>.log and logs/latest-run.log.
+    ['./utils/runLogReporter.ts'],
     ['playwright-qase-reporter', {
       mode: process.env.QASE_ENABLED === 'true' ? 'testops' : 'off',
       testops: {

@@ -137,7 +137,10 @@ test.describe('Payment Console — Bayad — Maynilad Water — End to End', () 
       await test.step('Verify the receipt email details', async () => {
         expect(email.toAddress, 'Receipt should be sent to the payer email').toContain(bayadState.context.email);
         expect(email.body, 'Email should confirm a successful transaction').toContain('Transaction Successful');
-        expect(email.body, 'Email should name the biller and amount paid').toContain(`PHP ${amount} to ${bayadBillers.mayniladWater.name}`);
+        // The "payment of PHP X to <biller>" line uses the TOTAL amount
+        // (bill + add-on fee), not the raw bill amount — confirmed live
+        // 2026-09-16 (bill 25.00 + fee 10.00 → email says "PHP 35.00").
+        expect(email.body, 'Email should name the biller and total paid').toContain(`PHP ${computeTotalAmount(amount, bayadBillers.mayniladWater)} to ${bayadBillers.mayniladWater.name}`);
         expect(email.body, 'Email should show the merchant reference').toContain(merchantReference);
         expect(email.body, 'Email should show the account number').toContain(accountNumber);
         expect(email.body, 'Email should show the total amount').toContain(computeTotalAmount(amount, bayadBillers.mayniladWater));
