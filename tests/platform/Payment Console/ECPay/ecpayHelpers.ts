@@ -36,11 +36,10 @@ import {
   computeTotalAmount,
   SERVICE_FEE,
 } from '../../../../utils/paymentConsoleData';
+import { accountForProject, type PaymentConsoleContext } from '../../../../utils/accounts';
 import { attachScreenshot } from '../../../../utils/attachScreenshot';
 import { logTransactionSummary } from '../../../../utils/logTransactionSummary';
 import { applyZoom } from '../../../../utils/applyZoom';
-
-export const context = paymentConsoleContext;
 
 // Page objects + the current qase id, shared across the flow helpers. Set in
 // the beforeEach registered by registerEcpayHooks().
@@ -48,10 +47,14 @@ export const ecpayState: {
   paymentConsole: PaymentConsolePage;
   transactionPage: TransactionPage;
   currentQaseId: number;
+  // In-app Payment Console context for the account this test runs under —
+  // resolved per-test in beforeEach from the project name.
+  context: PaymentConsoleContext;
 } = {
   paymentConsole: undefined as unknown as PaymentConsolePage,
   transactionPage: undefined as unknown as TransactionPage,
   currentQaseId: 0,
+  context: paymentConsoleContext,
 };
 
 export function setQaseId(id: number) {
@@ -67,10 +70,11 @@ export function registerEcpayHooks() {
   // headroom to ride it out.
   test.describe.configure({ retries: 2 });
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, testInfo) => {
     ecpayState.paymentConsole = new PaymentConsolePage(page);
     ecpayState.transactionPage = new TransactionPage(page);
     ecpayState.currentQaseId = 0;
+    ecpayState.context = accountForProject(testInfo.project.name).paymentConsoleContext;
     await applyZoom(page, 0.5); // zoom out to 50% so wide tables/modals fit
     await page.goto('https://test-web-admin.billeroo.com/dashboard');
     await page.waitForLoadState('networkidle');
@@ -100,9 +104,13 @@ export async function navigateAndSelectBiller(biller: BillerConfig) {
   });
 
   await test.step('Select business name, biller account, and service type', async () => {
-    await paymentConsole.selectBusinessCategoryAccount(context.businessCategoryAccount);
-    await paymentConsole.selectAccountCredential(context.billerAccount);
-    await paymentConsole.selectServiceType(context.serviceType);
+    // Merchant/agent consoles have no Business Name selector (context omits it)
+    // — skip that step for them; admin/super-admin selects it first.
+    if (ecpayState.context.businessCategoryAccount) {
+      await paymentConsole.selectBusinessCategoryAccount(ecpayState.context.businessCategoryAccount);
+    }
+    await paymentConsole.selectAccountCredential(ecpayState.context.billerAccount);
+    await paymentConsole.selectServiceType(ecpayState.context.serviceType);
   });
 
   await test.step(`Search for biller: ${biller.name}`, async () => {
@@ -149,7 +157,7 @@ export async function paySuccessfully(
       await paymentConsole.fillContractAccountNumber(accountNumber);
       await paymentConsole.fillBillerAccountName(accountName);
       await paymentConsole.fillBillerAmount(amount);
-      await paymentConsole.fillBillerEmail(context.email);
+      await paymentConsole.fillBillerEmail(ecpayState.context.email);
     });
 
     await test.step('Click Pay Now', async () => {
@@ -162,7 +170,7 @@ export async function paySuccessfully(
         accountNumber,
         accountName,
         amount,
-        email: context.email,
+        email: ecpayState.context.email,
         addOnFee: biller.addOnFee.toFixed(2),
         serviceFee: SERVICE_FEE,
         totalAmount: computeTotalAmount(amount, biller),
@@ -220,7 +228,7 @@ export async function paySuccessfully(
     'Account Number': accountNumber,
     'Account Name': accountName,
     'Merchant Reference': merchantReference,
-    'Email': context.email,
+    'Email': ecpayState.context.email,
     'Bill Amount': `PHP ${amount}`,
     'Add-on Fee': `PHP ${biller.addOnFee.toFixed(2)}`,
     'Service Fee': `PHP ${SERVICE_FEE}`,
@@ -247,7 +255,7 @@ export async function payWithInvalidAccountNumber(biller: BillerConfig) {
     await paymentConsole.fillContractAccountNumber(invalidBillerAccountNumber);
     await paymentConsole.fillBillerAccountName(accountName);
     await paymentConsole.fillBillerAmount(amount);
-    await paymentConsole.fillBillerEmail(context.email);
+    await paymentConsole.fillBillerEmail(ecpayState.context.email);
   });
 
   await test.step('Click Pay Now', async () => {
@@ -290,7 +298,7 @@ export async function payWithDuplicateTransaction(biller: BillerConfig, override
     await paymentConsole.fillContractAccountNumber(accountNumber);
     await paymentConsole.fillBillerAccountName(accountName);
     await paymentConsole.fillBillerAmount(amount);
-    await paymentConsole.fillBillerEmail(context.email);
+    await paymentConsole.fillBillerEmail(ecpayState.context.email);
   });
 
   await test.step('Click Pay Now', async () => {

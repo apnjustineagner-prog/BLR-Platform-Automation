@@ -38,7 +38,6 @@ import {
   registerBayadHooks,
   setQaseId,
   bayadState,
-  context,
   payBayadSuccessfully,
   payBayadWithInvalidAccountNumber,
   payBayadDuplicateTransaction,
@@ -136,7 +135,7 @@ test.describe('Payment Console — Bayad — Maynilad Water — End to End', () 
       await attachEmailScreenshot(testInfo, page, email, { baseName, label: 'email-receipt' });
 
       await test.step('Verify the receipt email details', async () => {
-        expect(email.toAddress, 'Receipt should be sent to the payer email').toContain(context.email);
+        expect(email.toAddress, 'Receipt should be sent to the payer email').toContain(bayadState.context.email);
         expect(email.body, 'Email should confirm a successful transaction').toContain('Transaction Successful');
         expect(email.body, 'Email should name the biller and amount paid').toContain(`PHP ${amount} to ${bayadBillers.mayniladWater.name}`);
         expect(email.body, 'Email should show the merchant reference').toContain(merchantReference);

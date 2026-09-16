@@ -44,7 +44,6 @@ import { attachScreenshot, attachEmailScreenshot } from '../../../../utils/attac
 import {
   registerBayadHooks,
   bayadState,
-  context,
   payBayadSuccessfully,
   computeTotalAmount,
   expect,
@@ -140,7 +139,7 @@ test.describe('Payment Console — Bayad — Manila Water — End to End', () =>
       await attachEmailScreenshot(testInfo, page, email, { baseName, label: 'email-receipt' });
 
       await test.step('Verify the receipt email details', async () => {
-        expect(email.toAddress, 'Receipt should be sent to the payer email').toContain(context.email);
+        expect(email.toAddress, 'Receipt should be sent to the payer email').toContain(bayadState.context.email);
         expect(email.body, 'Email should confirm a successful transaction').toContain('Transaction Successful');
         expect(email.body, 'Email should name the biller and amount paid').toContain(`PHP ${amount} to ${bayadBillers.manilaWater.name}`);
         expect(email.body, 'Email should show the merchant reference').toContain(merchantReference);

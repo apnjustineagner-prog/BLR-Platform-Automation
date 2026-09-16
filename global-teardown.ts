@@ -16,8 +16,10 @@
 
 import fs from 'fs';
 import path from 'path';
+import { activeAccount } from './utils/accounts';
 
-const STORAGE_FILE = path.resolve(process.cwd(), 'storageState.json');
+// Delete the session file for the account this run used (TEST_ACCOUNT).
+const STORAGE_FILE = path.resolve(process.cwd(), activeAccount().storageStateFile);
 
 async function globalTeardown() {
   // KEEP_SESSION=1 preserves storageState.json so it can be reused by

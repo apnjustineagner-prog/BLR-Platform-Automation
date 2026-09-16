@@ -17,17 +17,17 @@
 // ==============================================================================
 
 import { faker } from '@faker-js/faker';
+import { activeAccount } from './accounts';
 
 // ==============================================================================
-// SHARED CONTEXT — same business/credential/service type regardless of biller
+// SHARED CONTEXT — the in-app business/credential/service the console uses.
 // ==============================================================================
+// Resolved from the account selected for this run (TEST_ACCOUNT — see
+// utils/accounts.ts). Different roles may see different businesses/credentials
+// in their dropdowns, so each account carries its own context. Defaults to the
+// admin's AltPayNet Corp. III / AltPayNet Test Credential.
 
-export const paymentConsoleContext = {
-  businessCategoryAccount: 'AltPayNet Corp. III -',
-  billerAccount: 'AltPayNet Test Credential',
-  serviceType: 'Bills Payment',
-  email: 'apn.justineagner@gmail.com',
-};
+export const paymentConsoleContext = activeAccount().paymentConsoleContext;
 
 // ==============================================================================
 // BILLERS UNDER REGRESSION

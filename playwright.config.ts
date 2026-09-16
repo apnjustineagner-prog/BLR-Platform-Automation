@@ -18,8 +18,59 @@
 //
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { defineConfig } from '@playwright/test';
+import { defineConfig, type Project } from '@playwright/test';
 import 'dotenv/config';
+import { accounts, ACCOUNT_KEYS } from './utils/accounts';
+
+const VIEWPORT = { width: 1920, height: 1080 };
+
+// Build one setup project + one chromium browser project PER ACCOUNT so each
+// account is independently runnable (and clickable in the VS Code Test
+// Explorer). Naming: "setup-<key>" and "chromium-<key>" (e.g.
+// "chromium-mainMerchant") — auth.setup.ts / the specs derive the account from
+// the project name via accountKeyFromProjectName().
+//
+// Each browser project depends ONLY on its own setup, so running a single
+// account (e.g. --project=chromium-mainMerchant, or clicking it in the Test
+// Explorer) triggers exactly one login — no other accounts.
+//
+// NOTE: running ALL accounts at once would fire multiple OTP logins that could
+// race for codes in the single shared Gmail inbox. If you run everything,
+// serialize the logins with --workers=1 (the OTP fetcher also matches by
+// recency + retries, which absorbs mild overlap). Running one account at a
+// time — the normal case — is unaffected.
+function buildAccountProjects(): Project[] {
+  const projects: Project[] = [];
+
+  for (const key of ACCOUNT_KEYS) {
+    const account = accounts[key];
+    const setupName = `setup-${key}`;
+    const browserName = `chromium-${key}`;
+
+    projects.push({
+      name: setupName,
+      testMatch: /auth\.setup\.ts/,
+      use: {
+        browserName: 'chromium',
+        // Start clean — the account's storageState file doesn't exist yet.
+        storageState: { cookies: [], origins: [] },
+      },
+    });
+
+    projects.push({
+      name: browserName,
+      dependencies: [setupName],
+      use: {
+        browserName: 'chromium',
+        viewport: VIEWPORT,
+        // Load this account's saved session.
+        storageState: account.storageStateFile,
+      },
+    });
+  }
+
+  return projects;
+}
 
 // Bumped from the original 10s/10s/30s (30s/30s/90s) — this test env is
 // intermittently slow enough to trip those on otherwise-passing runs.
@@ -69,8 +120,9 @@ export default defineConfig({
   use: {
     headless: false,
 
-    // Reuse authenticated session saved by the 'setup' project
-    storageState: 'storageState.json',
+    // storageState is set PER PROJECT (each chromium-<account> loads its own
+    // account's session — see buildAccountProjects below), so it's not set
+    // globally here.
 
     // Video recording off entirely while Qase TestOps storage is full —
     // re-enable ('retain-on-failure') once space is cleared/upgraded
@@ -110,47 +162,10 @@ export default defineConfig({
       },
     }],
   ],
-  projects: [
-    // Logs in via Gmail OTP and saves storageState.json. Declared as a
-    // dependency of the browser projects so it runs everywhere — CLI,
-    // VS Code extension, and UI mode (globalSetup is skipped by the latter two).
-    {
-      name: 'setup',
-      testMatch: /auth\.setup\.ts/,
-      use: {
-        browserName: 'chromium',
-        // Start from a clean session — storageState.json doesn't exist yet
-        storageState: { cookies: [], origins: [] },
-      },
-    },
-    {
-      name: 'chromium',
-      dependencies: ['setup'],
-      use: {
-        browserName: 'chromium',
-        // Fit-the-screen viewport (1080p). Larger than the old 1280x720 so
-        // wide tables/modals fit; combined with the 60% page zoom applied in
-        // the top-level `use` init script.
-        viewport: { width: 1920, height: 1080 },
-      },
-    },
-    {
-      name: 'firefox',
-      dependencies: ['setup'],
-      use: {
-        browserName: 'firefox',
-        viewport: { width: 1920, height: 1080 },
-      },
-    },
-    {
-      name: 'webkit',
-      dependencies: ['setup'],
-      use: {
-        browserName: 'webkit',
-        viewport: { width: 1920, height: 1080 },
-      },
-    },
-  ],
-  // Running specific browser: npx playwright test --project=firefox
-  // Running specific browser with Tags: npx playwright test --project=chromium --grep @smoke
+  // One setup-<account> + one chromium-<account> project per account.
+  projects: buildAccountProjects(),
+  // Run a single account:   npx playwright test --project=chromium-mainMerchant
+  // Run the admin account:  npx playwright test --project=chromium-admin
+  // Run one spec, one acct: npx playwright test "tests/platform/Payment Console/ECPay/manila-water-company.spec.ts" --project=chromium-admin
+  // In the VS Code Test Explorer each chromium-<account> is listed/clickable.
 });

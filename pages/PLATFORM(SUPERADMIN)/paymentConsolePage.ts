@@ -126,11 +126,25 @@ export class PaymentConsolePage {
       .first();
     this.select2SearchBox              = page.getByRole('searchbox', { name: 'Search' });
     this.agentSelect                   = page.locator('#select2-agentSelect-container');
-    this.accountCredentialSelect       = page.locator('#select2-credentialSelect-container');
-    this.serviceTypeSelect             = page.locator('#select2-serviceTypesSelect-container');
+    // Admin/super-admin console renders these Select2 dropdowns with ids;
+    // the merchant/agent console renders the same dropdowns without those ids,
+    // exposing only the placeholder title ("Select Biller Account" / "Select
+    // Service Type"). Match either so the flow works for both roles (merchant
+    // title locators confirmed live 2026-09-10).
+    this.accountCredentialSelect       = page
+      .locator('#select2-credentialSelect-container')
+      .or(page.getByTitle('Select Biller Account'));
+    this.serviceTypeSelect             = page
+      .locator('#select2-serviceTypesSelect-container')
+      .or(page.getByTitle('Select Service Type'));
     // Accessible name has leading whitespace from an embedded icon, so match
     // loosely (see bayadPage.ts for the same fix). Results render into #searchInput.
-    this.billerSearchInput             = page.getByRole('textbox', { name: /search biller/i });
+    // Admin console: search box has an accessible name "search biller".
+    // Merchant/agent console: same box is #input-box (no matching name).
+    // Match either (merchant locator confirmed live 2026-09-10).
+    this.billerSearchInput             = page
+      .getByRole('textbox', { name: /search biller/i })
+      .or(page.locator('#input-box'));
     this.billerSearchResults           = page.locator('#searchInput');
     this.paymentCategorySelect         = page.locator('#paymentCategory');
     this.amountInput                   = page.locator('#amount');
@@ -194,26 +208,38 @@ export class PaymentConsolePage {
   // --- Navigation -------------------------------------------------------------
 
   // Sidebar link name includes an icon glyph and varies between sessions, so
-  // match loosely (same as bayadPage). networkidle is unreliable on this SPA —
-  // wait for the breadcrumb instead. The business-name select2 filters
-  // client-side against the /lookup/merchants list fetched on page load; if
-  // that response hasn't landed yet, typing into the search box searches an
-  // empty list and shows "No results found" (observed 2026-07-22) — wait for
-  // it here so selectBusinessCategoryAccount never races it.
+  // match loosely (same as bayadPage). networkidle is unreliable on this SPA.
+  //
+  // The console loads different lookup data per role (confirmed live
+  // 2026-09-15): the ADMIN console fetches /lookup/merchants (the business-name
+  // list); the MERCHANT/AGENT console has no business-name selector and instead
+  // fetches /lookup/payment-console/options/account-credentials. Waiting only
+  // on /lookup/merchants hung for 45s on the merchant console (it never fires).
+  // So wait on WHICHEVER lookup response the current role actually makes, then
+  // confirm readiness via the Biller Account dropdown (present on both roles).
   async goToPaymentConsole() {
-    const merchantsLoaded = this.page.waitForResponse((res) =>
-      res.url().includes('/lookup/merchants')
-    );
+    const lookupLoaded = this.page
+      .waitForResponse(
+        (res) =>
+          res.url().includes('/lookup/merchants') ||
+          res.url().includes('/payment-console/options/account-credentials'),
+        { timeout: 30_000 },
+      )
+      .catch(() => undefined); // best-effort — dropdown readiness is the real gate
     await this.page.getByRole('link', { name: /payment console/i }).first().click();
-    await this.page.getByText('Payment Console Category').waitFor();
-    await merchantsLoaded;
+    // The Biller Account select2 exists on every role's console once it's ready.
+    await this.accountCredentialSelect.waitFor({ state: 'visible', timeout: 30_000 });
+    await lookupLoaded;
     console.log('[PaymentConsolePage] Navigated to Payment Console');
   }
 
   async assertOnPaymentConsolePage() {
+    // The admin console shows a "Payment Console Category" heading; the
+    // merchant/agent console doesn't. Assert on the Biller Account dropdown,
+    // which is present on all roles.
     await expect(
-      this.page.getByText('Payment Console Category'),
-      'Should be on Payment Console page'
+      this.accountCredentialSelect,
+      'Should be on Payment Console page (Biller Account selector visible)'
     ).toBeVisible();
   }
 

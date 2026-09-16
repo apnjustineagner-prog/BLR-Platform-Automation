@@ -36,11 +36,10 @@ import {
   computeTotalAmount,
   SERVICE_FEE,
 } from '../../../../utils/paymentConsoleData';
+import { accountForProject, type PaymentConsoleContext } from '../../../../utils/accounts';
 import { attachScreenshot } from '../../../../utils/attachScreenshot';
 import { logTransactionSummary } from '../../../../utils/logTransactionSummary';
 import { applyZoom } from '../../../../utils/applyZoom';
-
-export const context = paymentConsoleContext;
 
 // Page objects + the current qase id, shared across the flow helpers. Set in
 // the beforeEach registered by registerBayadHooks(). Wrapped in an object so
@@ -50,10 +49,15 @@ export const bayadState: {
   paymentConsole: PaymentConsolePage;
   transactionPage: TransactionPage;
   currentQaseId: number;
+  // In-app Payment Console context for the account this test runs under —
+  // resolved per-test in beforeEach from the project name (per-account
+  // projects). Defaults to the admin context until beforeEach runs.
+  context: PaymentConsoleContext;
 } = {
   paymentConsole: undefined as unknown as PaymentConsolePage,
   transactionPage: undefined as unknown as TransactionPage,
   currentQaseId: 0,
+  context: paymentConsoleContext,
 };
 
 export function setQaseId(id: number) {
@@ -69,10 +73,12 @@ export function registerBayadHooks() {
   // headroom to ride it out.
   test.describe.configure({ retries: 2 });
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, testInfo) => {
     bayadState.paymentConsole = new PaymentConsolePage(page);
     bayadState.transactionPage = new TransactionPage(page);
     bayadState.currentQaseId = 0;
+    // Resolve the in-app context for the account this project runs under.
+    bayadState.context = accountForProject(testInfo.project.name).paymentConsoleContext;
     await applyZoom(page, 0.5); // zoom out to 50% so wide tables/modals fit
     await page.goto('https://test-web-admin.billeroo.com/dashboard');
     await page.waitForLoadState('networkidle');
@@ -100,9 +106,13 @@ export async function navigateAndSelectBiller(biller: BillerConfig) {
   });
 
   await test.step('Select business name, biller account, and service type', async () => {
-    await paymentConsole.selectBusinessCategoryAccount(context.businessCategoryAccount);
-    await paymentConsole.selectAccountCredential(context.billerAccount);
-    await paymentConsole.selectServiceType(context.serviceType);
+    // Merchant/agent consoles have no Business Name selector (context omits it)
+    // — skip that step for them; admin/super-admin selects it first.
+    if (bayadState.context.businessCategoryAccount) {
+      await paymentConsole.selectBusinessCategoryAccount(bayadState.context.businessCategoryAccount);
+    }
+    await paymentConsole.selectAccountCredential(bayadState.context.billerAccount);
+    await paymentConsole.selectServiceType(bayadState.context.serviceType);
   });
 
   await test.step(`Search for biller: ${biller.name}`, async () => {
@@ -133,7 +143,7 @@ export async function payBayadSuccessfully(
   await test.step('Fill payment form', async () => {
     await paymentConsole.fillGenericAccountNumber(accountNumber);
     await paymentConsole.fillGenericAmount(amount);
-    await paymentConsole.fillGenericEmail(context.email);
+    await paymentConsole.fillGenericEmail(bayadState.context.email);
   });
 
   await test.step('Click Pay Now', async () => {
@@ -145,7 +155,7 @@ export async function payBayadSuccessfully(
       billerName: biller.name,
       accountNumber,
       amount,
-      email: context.email,
+      email: bayadState.context.email,
       addOnFee: biller.addOnFee.toFixed(2),
       serviceFee: SERVICE_FEE,
       totalAmount: computeTotalAmount(amount, biller),
@@ -193,7 +203,7 @@ export async function payBayadSuccessfully(
     'Service Provider': biller.name,
     'Account Number': accountNumber,
     'Merchant Reference': merchantReference,
-    'Email': context.email,
+    'Email': bayadState.context.email,
     'Bill Amount': `PHP ${amount}`,
     'Add-on Fee': `PHP ${biller.addOnFee.toFixed(2)}`,
     'Service Fee': `PHP ${SERVICE_FEE}`,
@@ -219,7 +229,7 @@ export async function payBayadWithInvalidAccountNumber(biller: BillerConfig, exp
   await test.step('Fill payment form with an invalid account number', async () => {
     await paymentConsole.fillGenericAccountNumber(invalidBillerAccountNumber);
     await paymentConsole.fillGenericAmount(amount);
-    await paymentConsole.fillGenericEmail(context.email);
+    await paymentConsole.fillGenericEmail(bayadState.context.email);
   });
 
   await test.step('Click Pay Now', async () => {

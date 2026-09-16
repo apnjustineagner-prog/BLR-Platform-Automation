@@ -22,17 +22,20 @@
 import { test } from '@playwright/test';
 import { PaymentConsolePage } from '../../../../pages/PLATFORM(SUPERADMIN)/paymentConsolePage';
 import { paymentConsoleContext, sssBillers, BillerConfig } from '../../../../utils/paymentConsoleData';
+import { accountForProject, type PaymentConsoleContext } from '../../../../utils/accounts';
 import { attachScreenshot } from '../../../../utils/attachScreenshot';
 import { applyZoom } from '../../../../utils/applyZoom';
 
-const context = paymentConsoleContext;
+// In-app context for the account this project runs under — set in beforeEach.
+let context: PaymentConsoleContext = paymentConsoleContext;
 
 test.describe.configure({ retries: 2 });
 
 let paymentConsole: PaymentConsolePage;
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }, testInfo) => {
   paymentConsole = new PaymentConsolePage(page);
+  context = accountForProject(testInfo.project.name).paymentConsoleContext;
   await applyZoom(page, 0.5); // zoom out to 50% so wide tables/modals fit
   await page.goto('https://test-web-admin.billeroo.com/dashboard');
   await page.waitForLoadState('networkidle');
@@ -53,7 +56,10 @@ async function navigateAndSelectBiller(biller: BillerConfig) {
   });
 
   await test.step('Select business name, biller account, and service type', async () => {
-    await paymentConsole.selectBusinessCategoryAccount(context.businessCategoryAccount);
+    // Merchant/agent consoles have no Business Name selector (context omits it).
+    if (context.businessCategoryAccount) {
+      await paymentConsole.selectBusinessCategoryAccount(context.businessCategoryAccount);
+    }
     await paymentConsole.selectAccountCredential(context.billerAccount);
     await paymentConsole.selectServiceType(context.serviceType);
   });
