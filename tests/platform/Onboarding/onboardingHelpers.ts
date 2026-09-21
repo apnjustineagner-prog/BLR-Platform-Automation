@@ -126,16 +126,30 @@ export function waitForMerchantCreateBody(page: Page): Promise<any> {
   return bodyPromise;
 }
 
-export async function cleanupMerchant(page: Page, merchantId: string, searchTerm: string, token: string): Promise<void> {
-  await page.request.patch(
-    `${BASE_URL}/business-category/${merchantId}/deactivate`,
-    { headers: { Authorization: token, 'Content-Type': 'application/json' }, timeout: 30000 }
-  ).catch(() => {});
-  const ob = new OnboardingPage(page);
-  await ob.goToOnboarding();
-  await ob.searchSpecificMerchant(searchTerm);
-  await ob.clickDelete(searchTerm);
-  await ob.confirmDelete();
+// API-ONLY cleanup, keyed on the merchantId captured from THIS test's own
+// create response — so we can only ever remove a record we created, never any
+// pre-existing/real merchant (no name/search matching, which could collide).
+//
+// Mirrors the live UI flow (confirmed via trace 2026-09-18):
+//   PATCH  /business-category/{merchantId}/deactivate   (delete requires inactive)
+//   DELETE /business-category/{merchantId}              (no body — the "DELETE"
+//                                                        confirmation key is a
+//                                                        UI-only guard)
+//
+// Best-effort: any failure is swallowed so teardown never fails a test. The
+// `searchTerm` param is kept for call-site compatibility but no longer used —
+// deletion is by id, not by searching the table.
+export async function cleanupMerchant(page: Page, merchantId: string, _searchTerm: string, token: string): Promise<void> {
+  if (!merchantId) return; // never run without a captured id
+  const headers = { Authorization: token, 'Content-Type': 'application/json' };
+  // Deactivate first (a merchant must be inactive before it can be deleted).
+  await page.request
+    .patch(`${BASE_URL}/business-category/${merchantId}/deactivate`, { headers, timeout: 30000 })
+    .catch(() => {});
+  // Delete the exact merchant we created.
+  await page.request
+    .delete(`${BASE_URL}/business-category/${merchantId}`, { headers, timeout: 30000 })
+    .catch(() => {});
 }
 
 /**
