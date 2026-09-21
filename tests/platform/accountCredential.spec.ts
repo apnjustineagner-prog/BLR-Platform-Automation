@@ -8,8 +8,9 @@
 //   Login → Dashboard → Onboarding → Merchant → Account Credential
 //
 // PREREQUISITES:
-//   Merchant "Test Business XORWL2" must exist. No pre-seeded credentials
-//   are required — every test creates its own fresh timestamped credential.
+//   None external. A fresh merchant is created once per run in beforeAll (see
+//   the TEMPORARY note below), and each test creates its own fresh timestamped
+//   credential against it.
 //
 // TEST ORGANIZATION:
 //   1. Access           — BLR-3614
@@ -33,6 +34,7 @@
 import { test } from '@playwright/test';
 import { AccountCredentialPage } from '../../pages/PLATFORM(SUPERADMIN)/accountCredentialPage';
 import { BlrLoginPage } from '../../pages/blrAccountOnboardingPage/blrLoginPage';
+import { OnboardModulePage } from '../../pages/blrAccountOnboardingPage/blrOnboardingModulePage';
 import { qase } from 'playwright-qase-reporter';
 import { attachScreenshot } from '../../utils/attachScreenshot';
 import credentials from '../../utils/decrypt';
@@ -41,7 +43,20 @@ import credentials from '../../utils/decrypt';
 // TEST DATA
 // ==============================================================================
 
-const merchant = 'Test Business XORWL2';
+// TEMPORARY (2026-09-21): the Onboarding table's search box was removed from
+// the UI, and its "Show All rows" page-size control no longer actually renders
+// all rows on this server-side table (confirmed live) — so a fixture merchant
+// buried deep in the ~1,360-row list can't be located by name anymore. Until
+// the search box is restored (the platform team says it's coming back soon),
+// this suite creates ONE fresh merchant at the start of the run: because the
+// table sorts newest-first, a just-created merchant lands on the first page
+// and is found immediately by the first-page scan in
+// utils/onboardingMerchantTable.ts.
+//
+// TODO(search-restored): once the Onboarding search box returns, delete the
+// beforeAll fresh-merchant creation below and go back to selecting a known
+// long-lived fixture merchant by name (e.g. the old 'Test Business XORWL2').
+let merchant = '';
 
 // ==============================================================================
 // SETUP
@@ -49,6 +64,22 @@ const merchant = 'Test Business XORWL2';
 
 let accountCredential: AccountCredentialPage;
 let currentQaseId = 0;
+
+// Create one fresh merchant for the whole suite (see TEMPORARY note above).
+test.beforeAll(async ({ browser }) => {
+  const page = await browser.newPage();
+  try {
+    const loginPage = new BlrLoginPage(page);
+    await loginPage.gotoLogin();
+    await loginPage.loginIfNeeded(credentials);
+    const onboardModule = new OnboardModulePage(page);
+    const { input } = await onboardModule.onboardBiller();
+    merchant = input.businessName;
+    console.log(`[accountCredential.beforeAll] Created fresh merchant: ${merchant}`);
+  } finally {
+    await page.close();
+  }
+});
 
 test.beforeEach(async ({ page }) => {
   accountCredential = new AccountCredentialPage(page);

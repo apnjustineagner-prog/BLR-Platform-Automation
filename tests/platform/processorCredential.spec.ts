@@ -8,8 +8,9 @@
 //   Login → Onboarding → Merchant → Account Credential (activated) → Processor Credential
 //
 // PREREQUISITE:
-//   Merchant "Test Business XORWL2" must exist with an active account credential
-//   named "Processor Credential FlowB"
+//   None external. A fresh merchant with an active account credential named
+//   "Processor Credential FlowB" is created once per run in beforeAll (see the
+//   TEMPORARY note below).
 //
 // TEST ORGANIZATION:
 //   1. Access           — BLR-3084
@@ -25,14 +26,27 @@
 import { test } from '@playwright/test';
 import { OnboardModulePage } from '../../pages/blrAccountOnboardingPage/blrOnboardingModulePage';
 import { ProcessorCredentialPage } from '../../pages/PLATFORM(SUPERADMIN)/processorCredentialPage';
+import { BlrLoginPage } from '../../pages/blrAccountOnboardingPage/blrLoginPage';
 import { qase } from 'playwright-qase-reporter';
 import { attachScreenshot } from '../../utils/attachScreenshot';
+import credentials from '../../utils/decrypt';
 
 // ==============================================================================
 // TEST DATA
 // ==============================================================================
 
-const merchant = 'Test Business XORWL2';
+// TEMPORARY (2026-09-21): the Onboarding table's search box was removed and its
+// "Show All rows" control no longer renders all rows on this server-side table,
+// so a fixture merchant buried deep in the ~1,360-row list can't be located by
+// name anymore. Until the search box is restored (platform team says soon),
+// create ONE fresh merchant + its active account credential at the start of the
+// run — the newest-first table puts a just-created merchant on the first page,
+// where the first-page scan in utils/onboardingMerchantTable.ts finds it.
+//
+// TODO(search-restored): once the Onboarding search box returns, delete the
+// beforeAll setup below and go back to the known long-lived fixture
+// ('Test Business XORWL2' + 'Processor Credential FlowB').
+let merchant = '';
 const accountCredential = 'Processor Credential FlowB';
 
 const processors = {
@@ -103,6 +117,33 @@ const processors = {
 
 let processorCredential: ProcessorCredentialPage;
 let currentQaseId = 0;
+
+// Create one fresh merchant + its active account credential for the whole suite
+// (see TEMPORARY note above the `merchant` declaration).
+test.beforeAll(async ({ browser }) => {
+  const page = await browser.newPage();
+  page.setDefaultTimeout(120_000);
+  try {
+    const loginPage = new BlrLoginPage(page);
+    await loginPage.gotoLogin();
+    await loginPage.loginIfNeeded(credentials);
+
+    // Fresh merchant via the UI onboard flow (lands on the first page).
+    const onboardModule = new OnboardModulePage(page);
+    const { input } = await onboardModule.onboardBiller();
+    merchant = input.businessName;
+
+    // Give it the active account credential the suite's flow navigates into.
+    const procPage = new ProcessorCredentialPage(page);
+    await procPage.goToOnboarding();
+    await procPage.selectMerchant(merchant);
+    await procPage.addAccountCredential(accountCredential);
+    await procPage.activateAccountCredential(0);
+    console.log(`[processorCredential.beforeAll] Created fresh merchant "${merchant}" with active account credential "${accountCredential}"`);
+  } finally {
+    await page.close();
+  }
+});
 
 test.beforeEach(async ({ page }, testInfo) => {
   processorCredential = new ProcessorCredentialPage(page);

@@ -16,15 +16,22 @@
 // table's row lookup was matching nothing and burning the full action
 // timeout (45s) before failing.
 //
-// The table still sorts by Date Created descending by default (no explicit
-// `order` param is even sent — it's a fixed server-side default) and offers
-// a page-size control (10/25/50/100/All) in place of search. So instead of
-// searching, these helpers switch to "All" and scan the rendered rows
-// directly for the target business name — this also covers long-lived
-// fixture merchants referenced by name in test data (utils/testData.ts),
-// which can sit anywhere in the 1,300+ row table, not just near the top
-// (confirmed live 2026-09-18: BLR-2721's fixture merchant was NOT within the
-// first 100 rows and was never found by a "top 100" strategy).
+// The table sorts by Date Created descending by default (a fixed server-side
+// default — no explicit `order` param is even sent), so a just-created or
+// just-updated merchant always lands on the FIRST page (the newest rows).
+// These helpers therefore just scan the first page for the target business
+// name — no page-size / "show rows" control needed.
+//
+// NOTE (2026-09-21): the page-size control ("Show 10/25/50/100/All rows") is
+// intentionally NOT used. The table is server-side processed (bServerSide),
+// and switching to "All" does not actually re-render all ~1,360 rows — the
+// table stays on the default 10-row page (confirmed live 2026-09-21 across
+// the dropdown link, the DataTables API page.len(-1).draw(), and .search()).
+// Since every flow here creates/updates the merchant it then looks up, and
+// those always appear on the first page, scanning the first page is both
+// sufficient and far more reliable. (Any test that needs a specific
+// long-lived merchant should create its own fresh one rather than relying on
+// a pre-seeded fixture buried deep in the list.)
 //
 // Used by:
 //   pages/blrAccountOnboardingPage/blrOnboardingModulePage.ts (getMerchantDetails)
@@ -37,35 +44,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
 export const ONBOARDING_TABLE_SELECTOR = '#business-CategoryTable';
-
-/**
- * Switches the onboarding table's page size to "All" so every row is in view
- * (~1,300+ rows; confirmed live 2026-09-18 the table redraws with all of
- * them within ~1-2s — light enough to not be worth the pagination logic a
- * fixed page size would need to cover fixture merchants deep in the list).
- * The selection does NOT persist across a reload (confirmed live 2026-09-18
- * — reloading always resets it back to the 10-row default), so callers must
- * call this again after every reload.
- *
- * Idempotent: skips the click entirely if already showing "All" rows.
- * Re-opening this dropdown a second time in the same page load (i.e.
- * without a reload in between) is NOT safe to do unconditionally — confirmed
- * live 2026-09-18 that the second open leaves the "All"/page-size option
- * links present in the DOM but absent from the accessibility tree (so
- * `getByRole('link', ...)` never finds them and times out), and its
- * `.dt-button-background` backdrop can get stuck covering the entire page,
- * silently intercepting every subsequent click anywhere (including
- * unrelated nav links) until the next reload. Skipping the redundant
- * re-open avoids the bug entirely.
- */
-export async function showMaxRowsPerPage(page: Page): Promise<void> {
-  const button = page.getByRole('button', { name: /show (\d+|all) rows/i });
-  const currentText = await button.textContent().catch(() => '');
-  if (currentText && /show all rows/i.test(currentText)) return;
-
-  await button.click();
-  await page.getByRole('link', { name: 'All', exact: true }).click();
-}
 
 /**
  * Waits for the onboarding table to finish loading its rows (a real row, not
@@ -102,7 +80,6 @@ export async function findOnboardingRow(
     }
     await table.waitFor({ state: 'visible', timeout: 60_000 });
     await waitForOnboardingListLoaded(page);
-    await showMaxRowsPerPage(page);
 
     const found = await targetRow
       .first()
@@ -134,7 +111,7 @@ export async function waitForOnboardingRowGone(
       await page.reload({ waitUntil: 'domcontentloaded' });
       await table.waitFor({ state: 'visible', timeout: 60_000 });
     }
-    await showMaxRowsPerPage(page);
+    await waitForOnboardingListLoaded(page);
     const stillVisible = await targetRow.isVisible().catch(() => false);
     if (!stillVisible) return;
     await page.waitForTimeout(3000);
