@@ -37,6 +37,7 @@
 // ==============================================================================
 
 import { Page, Locator, expect } from '@playwright/test';
+import { ONBOARDING_TABLE_SELECTOR, findOnboardingRow } from '../../utils/onboardingMerchantTable';
 
 // ==============================================================================
 // PAGE OBJECT
@@ -85,16 +86,23 @@ export class AccountCredentialPage {
 
   async goToOnboarding() {
     await this.onboardingNavLink.click();
-    await this.page.waitForLoadState('networkidle');
+    // This SPA polls continuously so the network never goes idle —
+    // waitForLoadState('networkidle') hangs its full timeout then fails
+    // (confirmed live 2026-09-17). The Onboarding table also has no search
+    // box (removed from the UI — see utils/onboardingMerchantTable.ts), so
+    // wait on the table itself as the readiness signal instead.
+    await this.page.locator(ONBOARDING_TABLE_SELECTOR).waitFor({ state: 'visible', timeout: 45_000 });
     console.log('[AccountCredentialPage] Navigated to Onboarding');
   }
 
   async selectMerchant(merchantName: string) {
-    await this.page.getByRole('searchbox', { name: 'Search:' }).fill(merchantName);
+    // No search box exists on the Onboarding table — reload + rescan for the
+    // merchant's row instead (see utils/onboardingMerchantTable.ts).
+    await findOnboardingRow(this.page, merchantName);
     const merchantLink = this.page.getByRole('link', { name: merchantName, exact: true });
-    await merchantLink.waitFor({ state: 'visible' });
     await merchantLink.click();
-    await this.page.waitForLoadState('networkidle');
+    // Wait for the account-credential module to render rather than networkidle.
+    await this.addAccountCredentialButton.waitFor({ state: 'visible', timeout: 45_000 }).catch(() => {});
     console.log(`[AccountCredentialPage] Selected merchant: ${merchantName}`);
   }
 

@@ -48,7 +48,7 @@ import {
 registerBayadHooks();
 
 test.describe('Payment Console — Bayad — Maynilad Water — End to End', () => {
-
+  
   // One payment, four checkpoints against that same transaction:
   //   Payment Summary + Transaction Receipt (both inside payBayadSuccessfully)
   //   → Transaction History → Email Receipt. Reports to both Qase cases via

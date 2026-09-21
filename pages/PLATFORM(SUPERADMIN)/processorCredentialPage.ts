@@ -42,6 +42,7 @@
 // ==============================================================================
 
 import { Page, expect, test } from '@playwright/test';
+import { ONBOARDING_TABLE_SELECTOR, findOnboardingRow } from '../../utils/onboardingMerchantTable';
 
 // ==============================================================================
 // TYPES
@@ -158,22 +159,30 @@ export class ProcessorCredentialPage {
 
   async goToOnboarding() {
     await this.onboardingNavLink.click();
-    await this.page.waitForLoadState('networkidle');
+    // This SPA polls continuously, so the network never goes idle —
+    // waitForLoadState('networkidle') always burns its full timeout and then
+    // fails (confirmed live 2026-09-17). The Onboarding table also has no
+    // search box (removed from the UI — see utils/onboardingMerchantTable.ts),
+    // so wait on the table itself as the readiness signal instead.
+    await this.page.locator(ONBOARDING_TABLE_SELECTOR).waitFor({ state: 'visible', timeout: 45_000 });
     console.log('[ProcessorCredentialPage] Navigated to Onboarding');
   }
 
   async selectMerchant(merchantName: string) {
-    await this.page.getByRole('searchbox', { name: 'Search:' }).fill(merchantName);
+    // No search box exists on the Onboarding table — reload + rescan for the
+    // merchant's row instead (see utils/onboardingMerchantTable.ts).
+    await findOnboardingRow(this.page, merchantName);
     const merchantLink = this.page.getByRole('link', { name: merchantName, exact: true });
-    await merchantLink.waitFor({ state: 'visible' });
     await merchantLink.click();
-    await this.page.waitForLoadState('networkidle');
+    // networkidle hangs on this polling SPA — domcontentloaded fires reliably,
+    // and the caller's next action waits for its own element.
+    await this.page.waitForLoadState('domcontentloaded');
     console.log(`[ProcessorCredentialPage] Selected merchant: ${merchantName}`);
   }
 
   async navigateIntoAccountCredential(accountCredentialName: string) {
     await this.page.getByRole('link', { name: accountCredentialName }).click();
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
     console.log(`[ProcessorCredentialPage] Navigated into account credential: ${accountCredentialName}`);
   }
 
@@ -219,7 +228,8 @@ export class ProcessorCredentialPage {
     await select.click();
     await this.processorSearchbox.fill(searchTerm);
     await this.page.getByRole('option', { name: processorName }).click();
-    await this.page.waitForLoadState('networkidle');
+    // Don't wait on networkidle (this SPA polls forever) — the Channel select
+    // rendering is the real readiness signal after picking a processor.
     await this.page.locator(`#select2-${mode}ChannelSelect-container`).waitFor({ state: 'visible' });
     console.log(`[ProcessorCredentialPage] Processor selected: ${processorName}`);
   }

@@ -37,6 +37,7 @@
 
 import { Page, expect } from '@playwright/test';
 import { AgentData } from '../../utils/businessData';
+import { findOnboardingRow, waitForOnboardingRowGone } from '../../utils/onboardingMerchantTable';
 
 // ==============================================================================
 // PAGE OBJECT
@@ -126,7 +127,13 @@ export class OnboardingPage {
   private readonly agentWebsiteEditInput;
 
   constructor(private page: Page) {
-    this.onboardingLink        = page.getByRole('link', { name: /onboarding/i });
+    // The sidebar "Onboarding" nav link specifically (id="merchant",
+    // href="/business-category"). Scoped by id because a plain
+    // getByRole('link', { name: /onboarding/i }) also matches merchant-row
+    // links whose text contains "(Onboarding)" — e.g. "Loading Test
+    // (Onboarding)" — causing a strict-mode violation (confirmed live
+    // 2026-09-18).
+    this.onboardingLink        = page.locator('a#merchant[href="/business-category"]');
     // Same underlying table as blrOnboardingModulePage.ts's getMerchantDetails
     // — this page object drives the same /business-category page, just via a
     // different set of flows (view/edit/delete/activate rather than create).
@@ -244,7 +251,10 @@ export class OnboardingPage {
     // waits below instead of the default actionTimeout.
     await this.onboardingLink.click({ timeout: 60_000 });
     await this.page.waitForLoadState('load', { timeout: 60_000 });
-    await this.searchMerchantInput.waitFor({ state: 'visible', timeout: 60_000 });
+    // The Onboarding table has no search box (removed from the UI — see
+    // utils/onboardingMerchantTable.ts), so wait on the table itself as the
+    // readiness signal instead.
+    await this.merchantTable.waitFor({ state: 'visible', timeout: 60_000 });
   }
 
   async goToSystemUser(){
@@ -259,25 +269,12 @@ export class OnboardingPage {
     ).toBeVisible();
   }
 
-  // fill() fires an `input` event, which the DataTables search box listens on —
-  // no need to type character-by-character anymore.
-  //
-  // Don't wait on networkidle here (previously did, via a `merchantTable`
-  // locator that was still a literal 'TODO' placeholder and never actually
-  // used): this page polls continuously in the background, same as
-  // blrDashboardPage.ts/blrOnboardingModulePage.ts already document, so
-  // networkidle never resolves — it was hanging until the *test's* timeout,
-  // not its own, which also broke cleanupMerchant() (it calls this method
-  // too) and cascaded into unrelated tests' teardown. Wait on the filtered
-  // row directly instead, matching getMerchantDetails()'s approach.
-  //
-  // Retry the search itself (not just the row wait): the backend search
-  // index can lag a few seconds behind a just-completed state change
-  // (deactivate/activate/delete), returning a genuine zero-result "No
-  // Merchants" response right after the action's success toast — the same
-  // class of async lag already handled for deletion in
-  // assertMerchantDeleted(). A single search can race that lag; re-issuing
-  // it after a short pause absorbs it instead of failing immediately.
+  // The onboarding table has no search box (see
+  // utils/onboardingMerchantTable.ts) — findOnboardingRow reloads + rescans
+  // the table directly instead, which also absorbs the create/update →
+  // queryable lag on this slow shared test env (confirmed live 2026-09-09:
+  // BLR-2717/2724 timed out on a stale read while the row appeared moments
+  // later).
   async searchMerchant(businessName: string) {
     await this.searchForMerchantRow(businessName);
   }
@@ -286,30 +283,18 @@ export class OnboardingPage {
     await this.searchForMerchantRow(businessName);
   }
 
-  // The row can lag behind creation on the slow shared env, worse under
-  // parallel workers (confirmed live 2026-09-09: BLR-2717/2724 timed out here
-  // while the row appeared moments later). Re-search with a short per-attempt
-  // wait, and reload between attempts so a stale filtered "no results" table
-  // (which never refreshes on its own) picks the row up once the backend
-  // catches up. Short waits + more attempts stay well within the test budget.
   private async searchForMerchantRow(businessName: string) {
-    const row = this.merchantTable.locator('tbody tr').filter({ hasText: businessName }).first();
-    const MAX_ATTEMPTS = 8;
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      if (attempt > 1) {
-        await this.page.reload({ waitUntil: 'domcontentloaded' });
-        await this.merchantTable.waitFor({ state: 'visible', timeout: 60_000 });
-      }
-      await this.searchMerchantInput.fill(businessName);
-      const found = await row.waitFor({ state: 'visible', timeout: 5_000 }).then(() => true).catch(() => false);
-      if (found) return;
-    }
-    // Final wait surfaces a clear timeout error if the row truly never appears.
-    await row.waitFor({ state: 'visible', timeout: 5_000 });
+    await findOnboardingRow(this.page, businessName);
   }
 
-  async openViewModal(){
-    await this.viewButton.click();
+  // Scoped to the specific merchant's row: with no search box to filter the
+  // table down to one result (see utils/onboardingMerchantTable.ts), a bare
+  // "view" button locator matches every row's view button (strict-mode
+  // violation — same class of bug as clickBusinessEdit, confirmed live
+  // 2026-09-18).
+  async openViewModal(merchantName: string) {
+    const row = this.merchantTable.locator('tbody tr').filter({ hasText: merchantName }).first();
+    await row.locator('button.viewButton').click();
     await this.viewModal.waitFor({ state: 'visible' });
   }
 
@@ -327,8 +312,12 @@ export class OnboardingPage {
     await this.page.waitForLoadState('networkidle');
   }
 
-  async deactivateMerchant() {
-    await this.deactivateButton.click();
+  // Scoped to the specific merchant's row — same reasoning as openViewModal:
+  // no search box to narrow the table down to one result, so a bare
+  // "deactivate" button locator would match every row's button.
+  async deactivateMerchant(merchantName: string) {
+    const row = this.merchantTable.locator('tbody tr').filter({ hasText: merchantName }).first();
+    await row.locator('button.deactivateButton').click();
     await this.confirmDeactivateButton.waitFor({ state: 'visible' });
     await this.confirmDeactivateButton.click();
     // Assert the toast before it auto-dismisses — networkidle + button wait below
@@ -337,8 +326,9 @@ export class OnboardingPage {
     await this.page.waitForLoadState('networkidle');
   }
 
-  async activateMerchant() {
-    await this.activateButton.click();
+  async activateMerchant(merchantName: string) {
+    const row = this.merchantTable.locator('tbody tr').filter({ hasText: merchantName }).first();
+    await row.locator('button.activateButton').click();
     await this.confirmActivateButton.waitFor({ state: 'visible' });
     await this.confirmActivateButton.click();
     // Assert the toast before it auto-dismisses — same timing issue as deactivateMerchant.
@@ -398,9 +388,17 @@ export class OnboardingPage {
     await this.cancelDeleteButton.click();
   }
 
-  async clickBusinessEdit() {
-   await this.bussinessEditPage.click();
-    await this.page.waitForLoadState('networkidle');
+  // Scoped to the specific merchant's row: with no search box to filter the
+  // table down to one result (see utils/onboardingMerchantTable.ts), the
+  // table can show many rows at once, and a bare "Edit" button locator
+  // matches all of them (strict-mode violation — confirmed live 2026-09-18).
+  async clickBusinessEdit(merchantName: string) {
+    const row = this.merchantTable.locator('tbody tr').filter({ hasText: merchantName }).first();
+    await row.getByTitle('Edit').click();
+    // Don't wait on networkidle — this SPA polls continuously so it never
+    // fires (same fix already applied elsewhere in this file). Wait for the
+    // edit form to actually render instead.
+    await this.businessNameEditInput.waitFor({ state: 'visible', timeout: 30_000 });
   }
 
   async saveMerchantDetails() {
@@ -462,29 +460,10 @@ export class OnboardingPage {
   }
 
   async assertMerchantDeleted(merchantName: string) {
-    const row = this.page.getByRole('row', { name: merchantName });
-
-    // Deletion is processed async server-side, so the row can still show up
-    // for a while after the confirm click returns. Re-search and poll.
-    //
-    // Deliberately NOT using searchSpecificMerchant/searchForMerchantRow here:
-    // that helper retries up to 3x (~49s worst case) because it assumes the
-    // row *should* exist. Here the row is expected to become absent, so every
-    // poll would pay close to that full 49s failing to find it before falling
-    // through — 5 polls could approach/exceed this flow's 180s test budget.
-    // A plain fill + short settle is enough to let the table re-filter.
-    for (let attempt = 1; attempt <= 5; attempt++) {
-      await this.searchMerchantInput.fill(merchantName);
-      await this.page.waitForTimeout(2000);
-      const stillVisible = await row.isVisible().catch(() => false);
-      if (!stillVisible) return;
-      await this.page.waitForTimeout(3000);
-    }
-
-    await expect(
-      row,
-      `Merchant "${merchantName}" should no longer appear in the table`
-    ).toBeHidden();
+    // Deletion is processed async server-side, so the row can still appear
+    // for a while after the confirm click returns. No search box exists (see
+    // utils/onboardingMerchantTable.ts) — reload + rescan until it's gone.
+    await waitForOnboardingRowGone(this.page, merchantName);
   }
 
   async assertMerchantNotDeleted(expectedMessage: string) {

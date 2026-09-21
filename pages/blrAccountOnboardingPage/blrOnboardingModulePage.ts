@@ -2,6 +2,7 @@ import { Page, expect } from '@playwright/test';
 import { BlrDashboardPage } from './blrDashboardPage';
 import { BusinessFormData } from '../../utils/businessData';
 import { faker } from '@faker-js/faker';
+import { ONBOARDING_TABLE_SELECTOR, findOnboardingRow } from '../../utils/onboardingMerchantTable';
 
 // ==============================================================================
 // TYPES
@@ -366,48 +367,17 @@ export class OnboardModulePage {
   /**
    * Finds the row in the onboarding table matching the given business name
    * and maps each cell to a MerchantDetails field by matching column headers.
+   *
+   * The onboarding table has no search/filter control (see
+   * utils/onboardingMerchantTable.ts for the full story) — findOnboardingRow
+   * reloads + rescans the (search-less) table directly, which also absorbs
+   * the create → queryable lag on this slow shared test env (confirmed live
+   * 2026-09-09: the merchant DOES land in the table, just later than a naive
+   * single read would catch).
    */
   async getMerchantDetails(businessName: string): Promise<MerchantDetails> {
-    const table = this.page.locator('#business-CategoryTable');
-    const searchBox = this.page.getByRole('searchbox', { name: /search/i });
-    // Filter the table down to the new row instead of relying on it staying on
-    // page 1 of the unfiltered, date-sorted list — other activity in the shared
-    // environment can otherwise push it off the page before we read it.
-    const targetRow = table.locator('tbody tr').filter({ hasText: businessName });
-
-    // Reload before searching: right after creation the merchant is often not
-    // yet queryable on the slow test env, and a filtered "no results" table
-    // never refreshes on its own — only a reload + fresh search picks the new
-    // row up once the backend catches up.
-    // The row can take a while to become queryable after creation on the slow
-    // test env — confirmed live 2026-09-09 that the merchant DOES land in the
-    // table, just later than the old 3-attempt budget allowed (every
-    // create-then-read test failed with "No Merchants" while the row was
-    // visible in the UI moments later), and slower still under parallel
-    // workers hammering the shared env.
-    //
-    // Retry with a SHORT per-attempt row wait (not a long one) so many cheap
-    // reload+search cycles fit inside the test's overall timeout — a long
-    // per-attempt wait plus growing sleeps overran the 180s test budget
-    // (BLR-2716). The reload itself is the expensive part; keep the row wait
-    // tight and just do more passes. Total worst case ≈ 8 × (reload + ~5s).
-    const MAX_ATTEMPTS = 8;
-    let rowVisible = false;
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS && !rowVisible; attempt++) {
-      await this.page.reload({ waitUntil: 'domcontentloaded' });
-      await table.waitFor({ state: 'visible', timeout: 60_000 });
-      // pressSequentially, not fill(): the table search listens on keystrokes,
-      // and fill() dispatches none — the value lands without running a search.
-      await searchBox.clear();
-      await searchBox.pressSequentially(businessName, { delay: 100 });
-      rowVisible = await targetRow
-        .waitFor({ state: 'visible', timeout: 5_000 })
-        .then(() => true)
-        .catch(() => false);
-    }
-    if (!rowVisible) {
-      throw new Error(`Merchant "${businessName}" not found in onboarding table after ${MAX_ATTEMPTS} reload attempts`);
-    }
+    const table = this.page.locator(ONBOARDING_TABLE_SELECTOR);
+    const targetRow = await findOnboardingRow(this.page, businessName);
 
     // Build a header → column index map
     const rawHeaders = await table.locator('thead th').allTextContents();

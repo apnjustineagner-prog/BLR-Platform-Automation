@@ -118,7 +118,7 @@ export default defineConfig({
   },
 
   use: {
-    headless: false,
+    headless: true,
 
     // storageState is set PER PROJECT (each chromium-<account> loads its own
     // account's session — see buildAccountProjects below), so it's not set

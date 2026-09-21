@@ -92,7 +92,7 @@ test.describe('Merchant', () => {
       });
 
       await test.step('Open the view modal', async () => {
-        await onbState.onboarding.openViewModal();
+        await onbState.onboarding.openViewModal(merchantName);
       });
 
       await test.step('Verify the view modal is displayed', async () => {
@@ -136,7 +136,7 @@ test.describe('Merchant', () => {
       });
 
       await test.step('Open the edit form and update all details', async () => {
-        await onbState.onboarding.clickBusinessEdit();
+        await onbState.onboarding.clickBusinessEdit(merchantName);
         await onbState.onboarding.fillMerchantEditForm(updatedData);
       });
 
@@ -181,7 +181,7 @@ test.describe('Merchant', () => {
       });
 
       await test.step('Deactivate the merchant', async () => {
-        await onbState.onboarding.deactivateMerchant();
+        await onbState.onboarding.deactivateMerchant(merchantEmail);
       });
 
       await test.step('Delete the merchant', async () => {
@@ -263,7 +263,7 @@ test.describe('Merchant', () => {
       await test.step('Search for the new merchant and open edit form', async () => {
         await onbState.onboarding.goToOnboarding();
         await onbState.onboarding.searchSpecificMerchant(newMerchantName);
-        await onbState.onboarding.clickBusinessEdit();
+        await onbState.onboarding.clickBusinessEdit(newMerchantName);
       });
 
       await test.step('Clear Business Name and attempt to save', async () => {
@@ -387,7 +387,7 @@ test.describe('Merchant', () => {
       await test.step('Deactivate the merchant', async () => {
         await onbState.onboarding.goToOnboarding();
         await onbState.onboarding.searchSpecificMerchant(merchantEmail);
-        await onbState.onboarding.deactivateMerchant();
+        await onbState.onboarding.deactivateMerchant(merchantEmail);
       });
 
       await test.step('Attempt to delete the merchant with active agent', async () => {
@@ -465,13 +465,13 @@ test.describe('Merchant', () => {
       await test.step('Search for the merchant and deactivate it', async () => {
         await onbState.onboarding.goToOnboarding();
         await onbState.onboarding.searchSpecificMerchant(merchantEmail);
-        await onbState.onboarding.deactivateMerchant();
+        await onbState.onboarding.deactivateMerchant(merchantEmail);
       });
 
       await test.step('Activate the merchant from inactive state', async () => {
         await onbState.onboarding.goToOnboarding();
         await onbState.onboarding.searchSpecificMerchant(merchantEmail);
-        await onbState.onboarding.activateMerchant(); // asserts success toast internally
+        await onbState.onboarding.activateMerchant(merchantEmail); // asserts success toast internally
       });
     }
   );
@@ -514,7 +514,7 @@ test.describe('Merchant', () => {
       await test.step('Search for the merchant and deactivate it', async () => {
         await onbState.onboarding.goToOnboarding();
         await onbState.onboarding.searchSpecificMerchant(merchantEmail);
-        await onbState.onboarding.deactivateMerchant(); // asserts success toast internally
+        await onbState.onboarding.deactivateMerchant(merchantEmail); // asserts success toast internally
       });
     }
   );
@@ -543,7 +543,7 @@ test.describe('Merchant', () => {
       });
 
       await test.step('Open the view modal and click Resend Activation', async () => {
-        await onbState.onboarding.openViewModal();
+        await onbState.onboarding.openViewModal(testEmail);
         await onbState.onboarding.resendActivationEmail();
       });
 
