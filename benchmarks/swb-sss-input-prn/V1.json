@@ -1,0 +1,296 @@
+{
+  "label": "V1",
+  "url": "https://test-new-sss.billeroo.com/1722b098-aa14-4728-af69-e0803671d4c3/inputprn",
+  "updatedAt": "2026-10-15T08:46:19.598Z",
+  "runsAveraged": 4,
+  "runsExcluded": 2,
+  "summary": {
+    "openInputPrnPage": {
+      "total": {
+        "avg": 1012,
+        "median": 842,
+        "min": 576,
+        "max": 1903
+      },
+      "server": {
+        "avg": 97,
+        "median": 97,
+        "min": 94,
+        "max": 101
+      }
+    },
+    "prnLookup": {
+      "total": {
+        "avg": 1005,
+        "median": 1017,
+        "min": 936,
+        "max": 1097
+      },
+      "server": {
+        "avg": 865,
+        "median": 877,
+        "min": 798,
+        "max": 963
+      }
+    },
+    "openConsent": {
+      "total": {
+        "avg": 211,
+        "median": 212,
+        "min": 208,
+        "max": 213
+      },
+      "server": null
+    },
+    "consentToTlpe": {
+      "total": {
+        "avg": 2813,
+        "median": 3139,
+        "min": 2256,
+        "max": 3174
+      },
+      "server": {
+        "avg": 158,
+        "median": 170,
+        "min": 98,
+        "max": 222
+      }
+    },
+    "tlpeToConfirmPayment": {
+      "total": {
+        "avg": 1664,
+        "median": 1798,
+        "min": 1097,
+        "max": 2175
+      },
+      "server": {
+        "avg": 96,
+        "median": 93,
+        "min": 90,
+        "max": 109
+      }
+    },
+    "payTo3ds": {
+      "total": {
+        "avg": 2877,
+        "median": 2921,
+        "min": 2650,
+        "max": 3114
+      },
+      "server": {
+        "avg": 724,
+        "median": 802,
+        "min": 475,
+        "max": 1043
+      }
+    },
+    "threeDsToResult": {
+      "total": {
+        "avg": 10062,
+        "median": 10166,
+        "min": 9649,
+        "max": 10389
+      },
+      "server": {
+        "avg": 71,
+        "median": 70,
+        "min": 60,
+        "max": 90
+      }
+    },
+    "resultToReceipt": {
+      "total": {
+        "avg": 377,
+        "median": 365,
+        "min": 341,
+        "max": 445
+      },
+      "server": {
+        "avg": 217,
+        "median": 209,
+        "min": 193,
+        "max": 268
+      }
+    }
+  },
+  "totalFlow": {
+    "avg": 20019,
+    "median": 20010,
+    "min": 18779,
+    "max": 22034
+  },
+  "rawRuns": [
+    {
+      "label": "V1",
+      "url": "https://test-new-sss.billeroo.com/1722b098-aa14-4728-af69-e0803671d4c3/inputprn",
+      "measuredAt": "2026-10-15T08:42:41.580Z",
+      "prn": "OC250000001193",
+      "transactionReference": "261015084215ZFV7229",
+      "postingStatus": "Payment has been posted successfully",
+      "steps": {
+        "openInputPrnPage": {
+          "totalMs": 1903,
+          "serverMs": 97
+        },
+        "prnLookup": {
+          "totalMs": 936,
+          "serverMs": 798
+        },
+        "openConsent": {
+          "totalMs": 213,
+          "serverMs": null
+        },
+        "consentToTlpe": {
+          "totalMs": 3139,
+          "serverMs": 142
+        },
+        "tlpeToConfirmPayment": {
+          "totalMs": 2175,
+          "serverMs": 93
+        },
+        "payTo3ds": {
+          "totalMs": 2921,
+          "serverMs": 475
+        },
+        "threeDsToResult": {
+          "totalMs": 10389,
+          "serverMs": 62
+        },
+        "resultToReceipt": {
+          "totalMs": 358,
+          "serverMs": 196
+        }
+      },
+      "postingFailedAttempts": []
+    },
+    {
+      "label": "V1",
+      "url": "https://test-new-sss.billeroo.com/1722b098-aa14-4728-af69-e0803671d4c3/inputprn",
+      "measuredAt": "2026-10-15T08:46:19.598Z",
+      "prn": "OC250000001229",
+      "transactionReference": "261015084447DFE9051",
+      "postingStatus": "Payment has been posted successfully",
+      "steps": {
+        "openInputPrnPage": {
+          "totalMs": 725,
+          "serverMs": 101
+        },
+        "prnLookup": {
+          "totalMs": 1097,
+          "serverMs": 963
+        },
+        "openConsent": {
+          "totalMs": 208,
+          "serverMs": null
+        },
+        "consentToTlpe": {
+          "totalMs": 2681,
+          "serverMs": 98
+        },
+        "tlpeToConfirmPayment": {
+          "totalMs": 1798,
+          "serverMs": 90
+        },
+        "payTo3ds": {
+          "totalMs": 2650,
+          "serverMs": 575
+        },
+        "threeDsToResult": {
+          "totalMs": 9649,
+          "serverMs": 90
+        },
+        "resultToReceipt": {
+          "totalMs": 445,
+          "serverMs": 268
+        }
+      },
+      "postingFailedAttempts": []
+    },
+    {
+      "label": "V1",
+      "url": "https://test-new-sss.billeroo.com/1722b098-aa14-4728-af69-e0803671d4c3/inputprn",
+      "measuredAt": "2026-10-15T08:46:19.598Z",
+      "prn": "OC250000001274",
+      "transactionReference": "261015084520GVR9941",
+      "postingStatus": "Payment has been posted successfully",
+      "steps": {
+        "openInputPrnPage": {
+          "totalMs": 576,
+          "serverMs": 94
+        },
+        "prnLookup": {
+          "totalMs": 1017,
+          "serverMs": 877
+        },
+        "openConsent": {
+          "totalMs": 212,
+          "serverMs": null
+        },
+        "consentToTlpe": {
+          "totalMs": 2256,
+          "serverMs": 170
+        },
+        "tlpeToConfirmPayment": {
+          "totalMs": 1097,
+          "serverMs": 109
+        },
+        "payTo3ds": {
+          "totalMs": 3114,
+          "serverMs": 802
+        },
+        "threeDsToResult": {
+          "totalMs": 10166,
+          "serverMs": 60
+        },
+        "resultToReceipt": {
+          "totalMs": 341,
+          "serverMs": 193
+        }
+      },
+      "postingFailedAttempts": []
+    },
+    {
+      "label": "V1",
+      "url": "https://test-new-sss.billeroo.com/1722b098-aa14-4728-af69-e0803671d4c3/inputprn",
+      "measuredAt": "2026-10-15T08:46:19.598Z",
+      "prn": "OC250000001300",
+      "transactionReference": "261015084554KCZ2427",
+      "postingStatus": "Payment has been posted successfully",
+      "steps": {
+        "openInputPrnPage": {
+          "totalMs": 842,
+          "serverMs": 97
+        },
+        "prnLookup": {
+          "totalMs": 971,
+          "serverMs": 821
+        },
+        "openConsent": {
+          "totalMs": 209,
+          "serverMs": null
+        },
+        "consentToTlpe": {
+          "totalMs": 3174,
+          "serverMs": 222
+        },
+        "tlpeToConfirmPayment": {
+          "totalMs": 1584,
+          "serverMs": 90
+        },
+        "payTo3ds": {
+          "totalMs": 2823,
+          "serverMs": 1043
+        },
+        "threeDsToResult": {
+          "totalMs": 10042,
+          "serverMs": 70
+        },
+        "resultToReceipt": {
+          "totalMs": 365,
+          "serverMs": 209
+        }
+      },
+      "postingFailedAttempts": []
+    }
+  ]
+}

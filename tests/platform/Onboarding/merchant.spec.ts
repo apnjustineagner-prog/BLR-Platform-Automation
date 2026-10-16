@@ -47,6 +47,13 @@ import {
 
 registerOnboardingHooks();
 
+// Run this suite's tests one-at-a-time. Each test does a full onboard flow
+// (create merchant + credentials) that hammers a slow shared backend; running
+// them in parallel (workers=3) overwhelmed the onboarding/credential APIs and
+// caused mass timeouts (confirmed live 2026-10-07). Serial keeps the backend
+// load sane and the suite stable. Other suites still parallelize normally.
+test.describe.configure({ mode: 'serial' });
+
 test.describe('Merchant', () => {
 
   test(

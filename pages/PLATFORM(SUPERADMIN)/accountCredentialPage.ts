@@ -116,7 +116,15 @@ export class AccountCredentialPage {
   // --- Create -----------------------------------------------------------------
 
   async clickAddAccountCredential() {
-    await this.addAccountCredentialButton.click();
+    // The button can render before the SPA attaches its click handler, so a
+    // single click may land on a dead button and the modal never opens
+    // (confirmed live 2026-09-21 — same failure mode already hardened in
+    // BlrDashboardPage.clickAddNewBusinessModalButton). Retry the click until
+    // the Name field is actually visible instead of assuming it worked.
+    await expect(async () => {
+      await this.addAccountCredentialButton.click();
+      await expect(this.nameInput).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
     console.log('[AccountCredentialPage] Add Account Credential modal opened');
   }
 

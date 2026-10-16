@@ -156,16 +156,62 @@ export const bayadBillers: Record<string, BillerConfig> = {
 // same Payment Console selection flow (business name -> biller account ->
 // service type -> search -> select).
 //
-// NOTE: the biller-specific payment form fields for SSS are NOT captured yet
-// (Individual and Employer likely differ, and both differ from Manila
-// Water's ECPay form). accountNumbers/addOnFee are placeholders until the
-// form is explored live — the current specs only navigate to and select the
-// biller, they don't fill or submit the form.
+// SSS billers reach the payment form through the same selection flow, but the
+// form itself differs: there's a PRN field (not an account number) plus a
+// Country Code, and — for Individual — a "Generate PRN" modal that mints a PRN
+// from member details. Both Add-on Fee and Service Fee are 0.00 for SSS
+// (confirmed live 2026-10-12), so Total Amount == Bill Amount.
+//
+// GENERATE PRN (Individual): the modal takes an SS Number + Member Type +
+// Amount + an Applicable Month (Start/End). SSS rejects a month that's already
+// been paid ("Unsuccessful generation of reference. Applicable month MMYYYY is
+// already paid."), so the flow loops forward through months until one is
+// unpaid. The Applicable Month fields are a read-only bootstrap-datepicker
+// (month view) — only selectable via the picker, not typeable.
+export type SssGeneratePrnConfig = {
+  // Member Type <option> label in the Generate PRN modal, e.g.
+  // "O - Overseas Filipino Worker".
+  memberTypeLabel: string;
+  // Pool of valid SS Numbers for this member type (first is the default; the
+  // rest are fallbacks).
+  ssNumbers: string[];
+  // Contribution amount for this member type (OFW = 1200.00).
+  amount: string;
+  // Month search window (inclusive) to scan for an unpaid Applicable Month.
+  // 2026–2029 are mostly paid already, so start at 2030.
+  monthSearchStartYear: number;
+  monthSearchEndYear: number;
+};
+
+export const sssIndividualGeneratePrn: SssGeneratePrnConfig = {
+  memberTypeLabel: 'O - Overseas Filipino Worker',
+  ssNumbers: ['3484444471', '0666666668'],
+  amount: '1200.00',
+  monthSearchStartYear: 2030,
+  monthSearchEndYear: 2031,
+};
+
+// SSS - Individual negative-test PRNs. Each is rejected by SSS after Pay Now
+// with a "Try Again" modal and no Payment Summary (messages confirmed live from
+// QA screenshots 2026-10-12).
+export const sssIndividualNegativePrns = {
+  // Paid by our own Generate PRN and Pay e2e run (2026-10-12).
+  alreadyPaid: 'OJ260000097699',     // "PRN is already paid."
+  cancelled: 'O0818017727693',       // "PRN is already cancelled."
+  noData: 'OH260000092881',          // "No data found for the provided PRN."
+  invalidFormat: 'OH26000009288!',   // "Invalid PRN format."
+  // A valid PRN with spaces inside it — only leading/trailing spaces are
+  // trimmed, so internal spacing should be rejected.
+  invalidSpacing: 'OJ26 0000 097699',
+  wrongMemberType: 'IH200001227510', // "Invalid PRN. Use a PRN generated for an SSS individual member."
+};
+
 export const sssBillers: Record<string, BillerConfig> = {
   individual: {
     name: 'SSS - Individual',
     processor: 'SSS',
     accountNumbers: [],
+    // Both fees are 0.00 for SSS (expected) — Total == Bill Amount.
     addOnFee: 0,
   },
   employer: {

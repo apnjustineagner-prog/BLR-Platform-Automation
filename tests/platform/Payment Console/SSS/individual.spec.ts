@@ -1,95 +1,249 @@
 // tests/platform/Payment Console/SSS/individual.spec.ts
 //
 // ==============================================================================
-// PAYMENT CONSOLE TEST SUITE — SSS (Individual)
+// PAYMENT CONSOLE — SSS (Individual) — HAPPY PATH + NEGATIVE
 // ==============================================================================
 //
-// PROCESSOR SCOPE: SSS is a third processor alongside ECPay (ecpay.spec.ts)
-// and Bayad (bayad.spec.ts). SSS has two billers in the search directory —
-// "SSS - Individual" (this file) and "SSS - Employer" (employer.spec.ts).
+// TESTS:
+//   Happy path  Generate PRN and Pay e2e
+//   Negative    Already paid, Cancelled, Invalid spacing, Invalid characters,
+//               No data found, Non-individual PRN, Malformed email,
+//               Blank PRN + Country Code
 //
-// SCOPE FOR NOW: navigation only. The selection flow up to and including
-// picking the biller is identical to the other processors (business name ->
-// biller account -> service type -> search -> select). The biller-specific
-// SSS payment form fields aren't captured yet, so these tests stop once the
-// biller is selected — form fill/submit will be added once the form is
-// explored live.
+// SSS is a third processor alongside ECPay and Bayad. "SSS - Individual" is
+// reached through the same selection flow (business name -> biller account ->
+// service type -> search -> select), but its payment form differs: a PRN field
+// (not an account number), a Country Code, and a "Generate PRN" modal.
+//
+// FLOW (Generate PRN path):
+//   Select biller -> Generate PRN (OFW member details; scan Applicable Months
+//   until one is unpaid) -> PRN auto-fills -> Country Code (PH) + Email ->
+//   Pay Now -> Payment Summary -> Confirm -> Transaction Receipt ->
+//   Transaction History + View modal -> Email receipt.
+//
+// FEES: Add-on Fee and Service Fee are both 0.00 for SSS (expected), so Total
+// Amount == Bill Amount. The receipt renders Account Number blank (expected).
+//
+// WALLET: SSS payments do NOT deduct the ECPay wallet, so this runs in regular
+// regression (unlike the wallet-constrained ECPay/Bayad specs).
 //
 // Run: npx playwright test "tests/platform/Payment Console/SSS/individual.spec.ts"
 //
 // ==============================================================================
 
-import { test } from '@playwright/test';
-import { PaymentConsolePage } from '../../../../pages/PLATFORM(SUPERADMIN)/paymentConsolePage';
-import { paymentConsoleContext, sssBillers, BillerConfig } from '../../../../utils/paymentConsoleData';
-import { accountForProject, projectSupports, type PaymentConsoleContext } from '../../../../utils/accounts';
-import { attachScreenshot } from '../../../../utils/attachScreenshot';
-import { applyZoom } from '../../../../utils/applyZoom';
+import { test, expect } from '@playwright/test';
+import {
+  sssBillers,
+  sssIndividualGeneratePrn,
+  sssIndividualNegativePrns as prns,
+} from '../../../../utils/paymentConsoleData';
+import { fetchTransactionReceiptEmail } from '../../../../utils/fetchTransactionReceiptEmail';
+import { attachScreenshot, attachEmailScreenshot } from '../../../../utils/attachScreenshot';
+import { registerSssHooks, sssState, navigateAndSelectBiller } from './sssHelpers';
 
-// In-app context for the account this project runs under — set in beforeEach.
-let context: PaymentConsoleContext = paymentConsoleContext;
-
-test.describe.configure({ retries: 2 });
-
-let paymentConsole: PaymentConsolePage;
-
-test.beforeEach(async ({ page }, testInfo) => {
-  // Skip SSS specs for accounts with no SSS credential.
-  test.skip(
-    !projectSupports(testInfo.project.name, 'SSS'),
-    `${testInfo.project.name} has no SSS credential — skipping SSS suite`,
-  );
-  paymentConsole = new PaymentConsolePage(page);
-  context = accountForProject(testInfo.project.name).paymentConsoleContext;
-  await applyZoom(page, 0.5); // zoom out to 50% so wide tables/modals fit
-  await page.goto('https://test-web-admin.billeroo.com/dashboard');
-  await page.waitForLoadState('networkidle');
-});
-
-test.afterEach(async ({ page }, testInfo) => {
-  // Bundled under screenshots/<spec-slug>/ and attached to Playwright + Qase.
-  await attachScreenshot(testInfo, { page, label: 'final-page' });
-});
-
-// Same selection flow as ecpay.spec.ts / bayad.spec.ts — navigate to Payment
-// Console, pick the business/credential/service type, then search and select
-// the biller.
-async function navigateAndSelectBiller(biller: BillerConfig) {
-  await test.step('Navigate to Payment Console', async () => {
-    await paymentConsole.goToPaymentConsole();
-    await paymentConsole.assertOnPaymentConsolePage();
-  });
-
-  await test.step('Select business name, biller account, and service type', async () => {
-    // Merchant/agent consoles have no Business Name selector (context omits it).
-    if (context.businessCategoryAccount) {
-      await paymentConsole.selectBusinessCategoryAccount(context.businessCategoryAccount);
-    }
-    await paymentConsole.selectAccountCredential(context.billerAccount);
-    await paymentConsole.selectServiceType(context.serviceType);
-  });
-
-  await test.step(`Search for biller: ${biller.name}`, async () => {
-    await paymentConsole.searchBillerAccount(biller.name);
-  });
-
-  await test.step(`Select biller: ${biller.name}`, async () => {
-    await paymentConsole.selectBillerAccount(biller.name);
-  });
-}
-
-// ==============================================================================
-// TESTS — SSS INDIVIDUAL
-// ==============================================================================
+registerSssHooks();
 
 test.describe('Payment Console — SSS — Individual', () => {
 
   test(
-    'Navigate to and select SSS - Individual in Payment Console',
+    'Generate PRN and Pay e2e',
     { tag: ['@smoke', '@regression'] },
-    async () => {
-      await navigateAndSelectBiller(sssBillers.individual);
+    async ({ page }, testInfo) => {
+      const { paymentConsole, transactionPage, context } = sssState;
+      // Full flow + Generate PRN month scan + up to 2 min IMAP email poll.
+      testInfo.setTimeout(300_000);
+      const baseName = 'BLR-905';
+      const biller = sssBillers.individual;
+      const gen = sssIndividualGeneratePrn;
+      const amount = gen.amount;        // 1200.00
+      const addOnFee = '0.00';          // expected 0.00 for SSS
+      const serviceFee = '0.00';        // expected 0.00 for SSS
+      const totalAmount = amount;       // Total == Bill (both fees 0.00)
+      const email = context.email;
+
+      // Cutoff BEFORE paying so we only accept a receipt email that arrives after.
+      const beforePayment = new Date();
+
+      await navigateAndSelectBiller(biller);
+
+      const prn = await test.step('Generate a PRN (OFW; scan Applicable Months until unpaid)', async () => {
+        return paymentConsole.generateIndividualPRN({
+          ssNumber: gen.ssNumbers[0],
+          memberTypeLabel: gen.memberTypeLabel,
+          amount,
+          startYear: gen.monthSearchStartYear,
+          endYear: gen.monthSearchEndYear,
+        });
+      });
+      expect(prn, 'Generate PRN should auto-fill a PRN on the form').not.toBe('');
+
+      await test.step('Fill Country Code and Email, then Pay Now', async () => {
+        await paymentConsole.selectCountryCode('PH');
+        await paymentConsole.fillBillerEmail(email);
+        await paymentConsole.clickSssPayNow();
+      });
+
+      await test.step('Verify Payment Summary matches input', async () => {
+        await paymentConsole.assertPaymentSummaryDetails({
+          billerName: biller.name,
+          accountNumber: prn,       // the PRN is echoed in the summary
+          amount,
+          email,
+          addOnFee,
+          serviceFee,
+          totalAmount,
+        });
+        await paymentConsole.waitForModalSettled();
+        await attachScreenshot(testInfo, { page, fullPage: true, baseName, label: 'payment-summary' });
+      });
+
+      await test.step('Confirm the payment', async () => {
+        await paymentConsole.clickConfirm();
+      });
+
+      await test.step('Verify the Transaction Receipt', async () => {
+        await paymentConsole.assertPaymentReceipt({
+          billerName: biller.name,
+          // SSS renders Account Number blank on the receipt (expected behavior).
+          accountNumber: '',
+          amount,
+          addOnFee,
+          serviceFee,
+          totalAmount,
+        });
+        await attachScreenshot(testInfo, { page, fullPage: true, baseName, label: 'transaction-receipt' });
+      });
+
+      const merchantReference = await paymentConsole.getMerchantReferenceNumber();
+
+      await test.step('Verify transaction reflects in Transaction History', async () => {
+        await transactionPage.goToTransactionList();
+        await transactionPage.searchByReference(merchantReference);
+        await transactionPage.assertTransactionRow({
+          billerName: biller.name,
+          merchantReference,
+        });
+        await attachScreenshot(testInfo, { page, fullPage: true, baseName, label: 'transaction-history' });
+      });
+
+      await test.step('Verify fee breakdown in the View Transaction modal', async () => {
+        await transactionPage.viewTransaction(merchantReference);
+        await transactionPage.assertTransactionDetails({
+          billerName: biller.name,
+          processor: 'SSS',
+          merchantReference,
+          billAmount: amount,
+          addOnFee,
+          serviceFee,
+          totalAmount,
+          statusDescription: 'Payment Posted',
+        });
+        await attachScreenshot(testInfo, {
+          locator: transactionPage.viewModalLocator(),
+          baseName,
+          label: 'transaction-view-modal',
+        });
+        await transactionPage.closeViewTransaction();
+      });
+
+      const receiptEmail = await test.step('Fetch the receipt email', async () => {
+        return fetchTransactionReceiptEmail(beforePayment, merchantReference);
+      });
+      await attachEmailScreenshot(testInfo, page, receiptEmail, { baseName, label: 'email-receipt' });
+      await test.step('Verify the receipt email details', async () => {
+        expect(receiptEmail.toAddress, 'Receipt should be sent to the payer email').toContain(email);
+        expect(receiptEmail.body, 'Email should confirm a successful transaction').toContain('Transaction Successful');
+        expect(receiptEmail.body, 'Email should show the merchant reference').toContain(merchantReference);
+      });
     }
   );
 
+  // ----------------------------------------------------------------------------
+  // NEGATIVE — each submits an invalid payment and asserts it's rejected (SSS
+  // "Try Again" modal or client-side field errors), never a Payment Summary.
+  // Nothing is paid.
+  // ----------------------------------------------------------------------------
+
+  test('Already paid PRN is rejected', { tag: ['@regression'] }, async () => {
+    await payAndExpectRejection(prns.alreadyPaid, 'PRN is already paid.');
+  });
+
+  test('Cancelled PRN is rejected', { tag: ['@regression'] }, async () => {
+    await payAndExpectRejection(prns.cancelled, 'PRN is already cancelled.');
+  });
+
+  test('PRN with invalid spacing is rejected', { tag: ['@regression'] }, async () => {
+    await payAndExpectRejection(prns.invalidSpacing, 'Invalid PRN format.');
+  });
+
+  test('PRN with invalid characters is rejected', { tag: ['@regression'] }, async () => {
+    await payAndExpectRejection(prns.invalidFormat, 'Invalid PRN format.');
+  });
+
+  test('Unknown PRN is rejected with no data found', { tag: ['@regression'] }, async () => {
+    await payAndExpectRejection(prns.noData, 'No data found for the provided PRN.');
+  });
+
+  test('Non-individual PRN is rejected', { tag: ['@regression'] }, async () => {
+    await payAndExpectRejection(
+      prns.wrongMemberType,
+      'Invalid PRN. Use a PRN generated for an SSS individual member.',
+    );
+  });
+
+  test('Malformed email is rejected', { tag: ['@regression'] }, async () => {
+    const { paymentConsole } = sssState;
+    const gen = sssIndividualGeneratePrn;
+    await navigateAndSelectBiller(sssBillers.individual);
+    // Use a freshly generated (valid, unpaid) PRN so the email is the only
+    // thing wrong. Generating doesn't pay, so it doesn't use up the month.
+    await test.step('Generate a valid PRN', async () => {
+      await paymentConsole.generateIndividualPRN({
+        ssNumber: gen.ssNumbers[0],
+        memberTypeLabel: gen.memberTypeLabel,
+        amount: gen.amount,
+        startYear: gen.monthSearchStartYear,
+        endYear: gen.monthSearchEndYear,
+      });
+    });
+    await test.step('Enter a malformed email and Pay Now', async () => {
+      await paymentConsole.selectCountryCode('PH');
+      await paymentConsole.fillBillerEmail('apn.justineagnergmail.com'); // missing "@"
+      await paymentConsole.submitSssPayNow();
+    });
+    await test.step('Verify rejection: Invalid email address format.', async () => {
+      await paymentConsole.assertSssRejection('Invalid email address format.');
+    });
+  });
+
+  test('Blank PRN and Country Code show required-field errors', { tag: ['@regression'] }, async () => {
+    const { paymentConsole } = sssState;
+    await navigateAndSelectBiller(sssBillers.individual);
+    await test.step('Pay Now with PRN and Country Code blank', async () => {
+      // Fill the (actually required) email so only PRN + Country Code error.
+      await paymentConsole.fillBillerEmail(sssState.context.email);
+      await paymentConsole.submitSssPayNow();
+    });
+    await test.step('Verify "This field is required." on both fields', async () => {
+      await paymentConsole.assertSssRequiredFieldErrors();
+    });
+  });
+
 });
+
+// Fill PRN + Country Code + Email, Pay Now, expect the rejection. Email is
+// labelled "(Optional)" but the form rejects a blank one with "This field is
+// required.", so always fill it to keep the PRN the only thing under test.
+async function payAndExpectRejection(prn: string, expected: string | RegExp, email?: string) {
+  const { paymentConsole, context } = sssState;
+  await navigateAndSelectBiller(sssBillers.individual);
+  await test.step(`Enter PRN "${prn}" and Pay Now`, async () => {
+    await paymentConsole.fillSssPrn(prn);
+    await paymentConsole.selectCountryCode('PH');
+    await paymentConsole.fillBillerEmail(email ?? context.email);
+    await paymentConsole.submitSssPayNow();
+  });
+  await test.step(`Verify rejection: ${expected}`, async () => {
+    await paymentConsole.assertSssRejection(expected);
+  });
+}

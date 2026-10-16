@@ -118,7 +118,10 @@ export default defineConfig({
   },
 
   use: {
-    headless: true,
+    headless: false,
+    // SLOW_MO=<ms> slows every browser action so a headed run can be watched
+    // (e.g. SLOW_MO=800 npx playwright test ...). Off by default.
+    launchOptions: { slowMo: Number(process.env.SLOW_MO ?? 0) },
 
     // storageState is set PER PROJECT (each chromium-<account> loads its own
     // account's session — see buildAccountProjects below), so it's not set

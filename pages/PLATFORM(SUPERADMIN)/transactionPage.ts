@@ -148,6 +148,15 @@ export class TransactionPage {
       ['#viewStatusDescription', details.statusDescription, false],
     ];
     const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Amounts >= 1,000 render with a thousands separator ("PHP 1,200.00",
+    // confirmed live 2026-10-12 on SSS - Individual). Accept either form.
+    const amountPattern = (v: string) => {
+      const plain = php(v);
+      const grouped = php(
+        Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      );
+      return new RegExp(`${escapeRe(plain)}|${escapeRe(grouped)}`);
+    };
     for (const [selector, value, isAmount] of checks) {
       if (value === undefined) continue;
       const expected = isAmount ? php(value) : value;
@@ -162,7 +171,7 @@ export class TransactionPage {
       await expect(
         locator,
         `View Transaction modal should show ${selector} = ${expected}`,
-      ).toHaveValue(new RegExp(escapeRe(expected)));
+      ).toHaveValue(isAmount ? amountPattern(value) : new RegExp(escapeRe(expected)));
     }
     console.log('[TransactionPage] View Transaction details verified');
   }

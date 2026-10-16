@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>[BLR-868] [SSSv2] Platform: Add Service Provider Reference to Transaction History Search and Data Table</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #1a1a2e; margin: 40px; font-size: 12px; }
+  h1 { font-size: 18px; color: #4c1d95; margin-bottom: 4px; }
+  .sub { color: #666; margin-bottom: 20px; font-size: 12px; }
+  .meta { background:#f5f3ff; border:1px solid #ddd6fe; border-radius:8px; padding:14px 18px; margin-bottom:20px; }
+  .meta div { margin: 3px 0; }
+  .meta b { display:inline-block; width:130px; color:#4c1d95; }
+  .summary { display:flex; gap:12px; margin-bottom:24px; }
+  .card { flex:1; border-radius:8px; padding:12px; text-align:center; color:#fff; }
+  .card .n { font-size:24px; font-weight:700; }
+  .card .l { font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+  .c-total { background:#6d28d9; }
+  .c-pass { background:#16a34a; }
+  .c-fail { background:#dc2626; }
+  .c-untested { background:#6b7280; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { border:1px solid #e5e7eb; padding:8px 10px; text-align:left; vertical-align:top; }
+  th { background:#4c1d95; color:#fff; font-size:11px; text-transform:uppercase; }
+  tr:nth-child(even) td { background:#faf9ff; }
+  .tc-id { font-weight:700; color:#6d28d9; white-space:nowrap; }
+  .status-pass { color:#16a34a; font-weight:700; white-space:nowrap; }
+  .tag { color:#7c3aed; font-size:11px; }
+  .footer { margin-top:24px; color:#999; font-size:10px; text-align:center; }
+</style>
+</head>
+<body>
+  <h1>[BLR-868] [SSSv2] Platform: Add Service Provider Reference to Transaction History Search and Data Table</h1>
+  <div class="sub">Qase Test Run Report &middot; Project BLR (Billeroo)</div>
+
+  <div class="meta">
+    <div><b>Run ID</b> 388</div>
+    <div><b>Status</b> IN_PROGRESS</div>
+    <div><b>Start Time</b> 2026-09-23T03:21:55+00:00</div>
+    <div><b>Assigned To</b> Justine Agner (justine.agner@altpaynet.com)</div>
+    <div><b>Jira Ticket</b> BLR-868</div>
+    <div><b>Description</b> Test run for BLR-868 - Service Provider Reference in Transaction History Search and Data Table.</div>
+  </div>
+
+  <div class="summary">
+    <div class="card c-total"><div class="n">14</div><div class="l">Total</div></div>
+    <div class="card c-pass"><div class="n">14</div><div class="l">Passed</div></div>
+    <div class="card c-fail"><div class="n">0</div><div class="l">Failed</div></div>
+    <div class="card c-untested"><div class="n">0</div><div class="l">Untested</div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Case ID</th>
+        <th>Test Case Title</th>
+        <th>Preconditions</th>
+        <th>Test Data</th>
+        <th>Tag</th>
+        <th>Result</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="tc-id">5314</td>
+      <td>TC-01: Service Provider Reference is available as searchable field</td>
+      <td>User is logged into the Billeroo platform with access to the Transaction Module.</td>
+      <td></td>
+      <td class="tag">BLR-868</td>
+      <td class="status-pass">PASSED</td>
+    </tr>
+    <tr>
+      <td class="tc-id">5315</td>
+      <td>TC-02: Search accepts partial and exact Service Provider Reference matches</td>
+      <td>User is logged into the Billeroo platform with access to the Transaction Module. The Transaction History page is displayed.</td>
+      <td></td>
+      <td class="tag">BLR-868</td>
+      <td class="status-pass">PASSED</td>
+    </tr>
+    <tr>
+      <td class="tc-id">5316</td>
+      <td>TC-03: Searching by Service Provider Reference returns only matching transactions</td>
+      <td>User is logged into the Billeroo platform with access to the Transaction Module. The Transaction History page is displayed.</td>
+      <td></td>
+      <td class="tag">BLR-868</td>
+      <td class="status-pass">PASSED</td>
+    </tr>
+    <tr>
+      <td class="tc-id">5317</td>
+      <td>TC-04: Search is case-insensitive and trims leading/trailing whitespace</td>
+      <td>User is logged into the Billeroo platform with access to the Transaction Module. The Transaction History page is displayed.</td>
+      <td></td>
+      <td class="tag">BLR-868</td>
+      <td class="status-pass">PASSED</td>
+    </tr>
+    <tr>
+      <td class="tc-id">5318</td>
+      <td>TC-05: No results found displays when no transaction matches</td>
+      <td>User is logged into the Billeroo platform with access to the Transaction Module. The Transaction History page is displayed.</td>
+      <td></td>
+      <td class="tag">BLR-868</td>
+      <td class="status-pass">PASSED</td>
+    </tr>
+    <tr>
+      <td class="tc-id">5319</td>
+      <td>TC-06: Service Provider Reference appears as column in Data Table after search</td>
+      <td>User is logged into the Billeroo platform with access to the Transaction Module. The Transaction History page is displayed.</td>
+      <td></td>
+      <td class="tag">BLR-868</td>
+      <td class="status-pass">PASSED</td>
+    </tr>
+    <tr>
+      <td class="tc-id">5320</td>
+      <td>TC-07: Service Provider Reference values match exact system format</td>
+      <td>User is logged into the Billeroo platform with access to the Transaction Module. The Transaction History page is displayed with search results.</td>
+      <td></td>
+      <td class="tag">BLR-868</td>
+      <td class="status-pass">PASSED</td>
+    </tr>
+    <tr>
+      <td class="tc-id">5321</td>
+      <td>TC-08: Service Provider Reference column visible alongside existing columns</td>
+      <td>User is logged into the Billeroo platform with access to the Transaction Module. The Transaction History page is displayed with search results.</td>
+      <td></td>
+      <td class="tag">BLR-868</td>
+      <td class="status-pass">PASSED</td>
+    </tr>
+    <tr>
+      <td class="tc-id">5322</td>
+      <td>TC-09: Service Provider Reference search works with other active filters</td>
+      <td>User is logged into the Billeroo platform with access to the Transaction Module. The Transaction History page is displayed with active filters.</td>
+      <td></td>
+      <td class="tag">BLR-868</td>
+      <td class="status-pass">PASSED</td>
+    </tr>
+    <tr>
+      <td class="tc-id">5323</td>
+      <td>TC-10: Users can enable/disable SPR column via column configuration</td>
+      <td>User is logged into the Billeroo platform with access to the Transaction Module. The Transaction History page is displayed with search results.</td>
+      <td></td>
+      <td class="tag">BLR-868</td>
+      <td class="status-pass">PASSED</td>
+    </tr>
+    <tr>
+      <td class="tc-id">5324</td>
+      <td>TC-11: Export includes only enabled columns</td>
+      <td>User is logged into the Billeroo platform with access to the Transaction Module. The Transaction History page is displayed with column configuration.</td>
+      <td></td>
+      <td class="tag">BLR-868</td>
+      <td class="status-pass">PASSED</td>
+    </tr>
+    <tr>
+      <td class="tc-id">5325</td>
+      <td>TC-12: Export excludes hidden columns</td>
+      <td>User is logged into the Billeroo platform with access to the Transaction Module. The Transaction History page is displayed with column configuration.</td>
+      <td></td>
+      <td class="tag">BLR-868</td>
+      <td class="status-pass">PASSED</td>
+    </tr>
+    <tr>
+      <td class="tc-id">5326</td>
+      <td>TC-13: Export column order matches table arrangement</td>
+      <td>User is logged into the Billeroo platform with access to the Transaction Module. The Transaction History page is displayed with column configuration.</td>
+      <td></td>
+      <td class="tag">BLR-868</td>
+      <td class="status-pass">PASSED</td>
+    </tr>
+    <tr>
+      <td class="tc-id">5327</td>
+      <td>TC-14: Service Provider Reference is default column with tooltip and modal visibility</td>
+      <td>User is logged into the Billeroo platform with access to the Transaction Module. The Transaction History page is displayed.</td>
+      <td></td>
+      <td class="tag">BLR-868</td>
+      <td class="status-pass">PASSED</td>
+    </tr>
+    </tbody>
+  </table>
+
+  <div class="footer">Generated from Qase TestOps &middot; Run 388 &middot; All 14 cases PASSED &middot; Endorsed for PROD deployment</div>
+</body>
+</html>

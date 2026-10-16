@@ -94,6 +94,21 @@ export class PaymentConsolePage {
   private readonly genericEmailInput;
   private readonly genericPayNowButton;
 
+  // SSS - Individual payment form + Generate PRN modal (ids captured live
+  // 2026-10-12). PRN field (not account number), Country Code, and the
+  // Generate PRN modal that mints a PRN from member details.
+  private readonly sssPrnInput;
+  private readonly sssGenerateReferenceLink;
+  private readonly sssCountryCodeSelect;
+  private readonly sssGenSsNumberInput;
+  private readonly sssGenMemberTypeSelect;
+  private readonly sssGenPensionBoosterAmount;
+  private readonly sssGenPensionBoosterFlag;
+  private readonly sssGenAmountInput;
+  private readonly sssGenStartDateInput;
+  private readonly sssGenEndDateInput;
+  private readonly sssGenerateReferenceSubmit;
+
   // Post-Confirm rejection — the account number field isn't validated until
   // after Confirm; an invalid one (or a duplicate transaction) used to
   // redirect to payment-console-status-error with an "Oh no! Something went
@@ -185,10 +200,32 @@ export class PaymentConsolePage {
       .or(page.getByRole('button', { name: 'Pay Now' }));
     this.paymentSummaryModalBody       = page.locator('#dynamicModalBody');
 
-    this.genericAccountNumberInput     = page.getByRole('textbox', { name: 'Account Number', exact: true });
+    // Bayad billers label the account-number field differently (Maynilad:
+    // "Account Number", Manila Water: "8 Digit Contract Account Number", etc.),
+    // so match any textbox whose accessible name contains "Account Number"
+    // rather than one exact string. The regex still excludes "Account Name"
+    // since that doesn't contain "Number".
+    this.genericAccountNumberInput     = page.getByRole('textbox', { name: /account number/i });
     this.genericAmountInput            = page.getByRole('spinbutton', { name: 'Amount' });
     this.genericEmailInput             = page.getByRole('textbox', { name: 'Email(Optional)' });
     this.genericPayNowButton           = page.getByRole('button', { name: 'Pay Now' });
+
+    // SSS - Individual payment form (ids captured live 2026-10-12). The first
+    // field is a PRN (not an account number); there's a Country Code <select>
+    // and a "No PRN? Generate here" link that opens the Generate PRN modal.
+    // The PRN field id contains slashes/spaces, so match by attribute.
+    this.sssPrnInput                   = page.locator('[id="14_Digit_Individual_PRN_/_22_Digit_BRN"]');
+    this.sssGenerateReferenceLink      = page.locator('#generateReference');
+    this.sssCountryCodeSelect          = page.locator('#Country_Code');
+    // Generate PRN modal fields.
+    this.sssGenSsNumberInput           = page.locator('#SS_Number');
+    this.sssGenMemberTypeSelect        = page.locator('[id="Member_Type[1/2/4/5]"]');
+    this.sssGenPensionBoosterAmount    = page.locator('#Pension_Booster_Amount');
+    this.sssGenPensionBoosterFlag      = page.locator('#Pension_Booster_Flag');
+    this.sssGenAmountInput             = page.locator('#Amount');
+    this.sssGenStartDateInput          = page.locator('#startDate');
+    this.sssGenEndDateInput            = page.locator('#endDate');
+    this.sssGenerateReferenceSubmit    = page.locator('#submitGenerateReferenceFormButton');
 
     this.receiptHeading                = page.getByText('Payment Successful!');
     this.statusCodeValue               = page.locator('#statusCodeValue');
@@ -358,11 +395,26 @@ export class PaymentConsolePage {
 
   async searchBillerAccount(searchTerm: string) {
     await this.billerSearchInput.pressSequentially(searchTerm, { delay: 80 });
-    // Wait until a match (exact preferred) is visible before selecting.
-    await expect(async () => {
-      const link = await this.resolveBillerLink(searchTerm);
-      await expect(link).toBeVisible({ timeout: 2_000 });
-    }).toPass({ timeout: 45_000 });
+    // The autocomplete can render a longer superset name first (e.g. searching
+    // "MANILA WATER" shows "MANILA WATER COMPANY" before the exact "MANILA
+    // WATER" link appears). Falling through to the substring match at that
+    // moment wrongly grabs the ECPay "...COMPANY" biller (regression seen
+    // 2026-09-16, and again live). So first give the EXACT link a chance to
+    // render before resolveBillerLink's substring fallback can kick in.
+    const exactLink = this.page.getByRole('link', { name: searchTerm, exact: true }).first();
+    const gotExact = await exactLink
+      .waitFor({ state: 'visible', timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (!gotExact) {
+      // No exact link in this directory (e.g. merchant/agent console renders
+      // only fuller official names) — fall back to waiting for any match.
+      await expect(async () => {
+        const link = await this.resolveBillerLink(searchTerm);
+        await expect(link).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 45_000 });
+    }
     console.log(`[PaymentConsolePage] Searched for biller: ${searchTerm}`);
   }
 
@@ -380,7 +432,18 @@ export class PaymentConsolePage {
   }
 
   async fillBillerAccountName(value: string) {
-    await this.billerAccountNameInput.fill(value);
+    // ECPay's Account Name field intermittently doesn't retain the typed value
+    // on the first fill (observed live: all other fields populate but Account
+    // Name submits blank → "This field is required"). Fill, then verify the
+    // value actually landed and re-fill once if it didn't.
+    const field = this.billerAccountNameInput;
+    await field.click();
+    await field.fill(value);
+    if ((await field.inputValue()) !== value) {
+      await field.fill('');
+      await field.pressSequentially(value);
+    }
+    await expect(field, 'Account Name should be populated before submit').toHaveValue(value);
   }
 
   async fillBillerAmount(value: string) {
@@ -419,6 +482,171 @@ export class PaymentConsolePage {
     await this.genericPayNowButton.click();
     await this.page.locator('#myModal').waitFor({ state: 'visible' });
     console.log('[PaymentConsolePage] Pay Now clicked (generic Bayad-style form)');
+  }
+
+  // --- SSS - Individual payment form -------------------------------------------
+
+  private static readonly SSS_MONTHS = [
+    'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec',
+  ];
+
+  // The Applicable Month fields are a read-only bootstrap-datepicker in month
+  // view — only the picker can set them (fill/type is a no-op). Open the picker
+  // on the field, click the year nav (.next/.prev) until it reads the target
+  // year, then click the 3-letter month cell.
+  private async pickSssMonth(field: typeof this.sssGenStartDateInput, monthIdx: number, year: number) {
+    await field.click();
+    const picker = this.page.locator('.datepicker-dropdown');
+    await picker.waitFor({ state: 'visible', timeout: 10_000 });
+    const monthsView = picker.locator('.datepicker-months');
+    const yearSwitch = monthsView.locator('.datepicker-switch');
+    for (let i = 0; i < 120; i++) {
+      const cur = parseInt((await yearSwitch.innerText()).trim(), 10);
+      if (cur === year) break;
+      await monthsView.locator(cur < year ? '.next' : '.prev').click();
+    }
+    await monthsView
+      .locator('span.month', { hasText: new RegExp(`^${PaymentConsolePage.SSS_MONTHS[monthIdx]}$`) })
+      .click();
+  }
+
+  // Opens the "No PRN? Generate here" modal, fills the member details, and
+  // scans forward through Applicable Months (startYear..endYear) until one
+  // generates successfully. SSS rejects an already-paid month inline with
+  // "Unsuccessful generation of reference. Applicable month MMYYYY is already
+  // paid." (modal stays open) — on that banner, advance to the next month. On
+  // success the banner reads "Successfully generated reference", the modal
+  // closes, and the minted PRN auto-populates the main form's PRN field, which
+  // this returns. Throws if every month in the window is already paid.
+  async generateIndividualPRN(opts: {
+    ssNumber: string;
+    memberTypeLabel: string;
+    amount: string;
+    startYear: number;
+    endYear: number;
+  }): Promise<string> {
+    await this.sssGenerateReferenceLink.click();
+    await this.sssGenSsNumberInput.waitFor({ state: 'visible', timeout: 15_000 });
+
+    await this.sssGenSsNumberInput.fill(opts.ssNumber);
+    await this.sssGenMemberTypeSelect.selectOption({ label: opts.memberTypeLabel });
+    await this.sssGenPensionBoosterAmount.fill('0').catch(() => {});
+    await this.sssGenPensionBoosterFlag.fill('0').catch(() => {});
+    await this.sssGenAmountInput.fill(opts.amount);
+
+    for (let year = opts.startYear; year <= opts.endYear; year++) {
+      for (let m = 0; m < 12; m++) {
+        await this.pickSssMonth(this.sssGenStartDateInput, m, year);
+        await this.pickSssMonth(this.sssGenEndDateInput, m, year);
+        await this.sssGenerateReferenceSubmit.click();
+
+        // Match on the message TEXT, not a generic .alert locator — the page
+        // has empty/close-button alert nodes that a `.first()` grabs (read as
+        // ""). The "already paid" message names the month as MMYYYY, so match
+        // that exact month: a banner left over from the previous attempt
+        // names a different month and won't be mistaken for this one.
+        const label = `${PaymentConsolePage.SSS_MONTHS[m]}-${year}`;
+        const mmyyyy = `${String(m + 1).padStart(2, '0')}${year}`;
+        const success = this.page.getByText(/Successfully generated reference/i).first();
+        const paidThisMonth = this.page
+          .getByText(new RegExp(`Applicable month ${mmyyyy} is already paid`, 'i'))
+          .first();
+
+        let outcome: 'success' | 'paid' | 'unknown' = 'unknown';
+        const deadline = Date.now() + 20_000;
+        while (Date.now() < deadline) {
+          if (await success.isVisible().catch(() => false)) { outcome = 'success'; break; }
+          if (await paidThisMonth.isVisible().catch(() => false)) { outcome = 'paid'; break; }
+          await this.page.waitForTimeout(250);
+        }
+
+        if (outcome === 'paid') {
+          console.log(`[PaymentConsolePage] Generate PRN ${label}: already paid, trying next month`);
+          continue;
+        }
+        if (outcome === 'success') {
+          // The PRN auto-fills the main form once the modal closes.
+          await expect(this.sssPrnInput, 'Generated PRN should auto-fill the PRN field').not.toHaveValue('', {
+            timeout: 10_000,
+          });
+          const prn = (await this.sssPrnInput.inputValue()).trim();
+          console.log(`[PaymentConsolePage] Generate PRN ${label}: success, PRN=${prn}`);
+          return prn;
+        }
+        // Neither outcome within 20s — surface whatever the modal is showing.
+        const modalText = (await this.sssGenSsNumberInput
+          .locator('xpath=ancestor::*[contains(@class,"modal")][1]')
+          .innerText()
+          .catch(() => '')).replace(/\s+/g, ' ').trim();
+        throw new Error(
+          `[PaymentConsolePage] Generate PRN ${label}: no success/already-paid result within 20s. Modal: "${modalText.slice(0, 200)}"`,
+        );
+      }
+    }
+    throw new Error(
+      `[PaymentConsolePage] Could not generate an SSS PRN — every month ${opts.startYear}-${opts.endYear} is already paid for SS ${opts.ssNumber}.`,
+    );
+  }
+
+  async fillSssPrn(value: string) {
+    await this.sssPrnInput.fill(value);
+  }
+
+  async getSssPrn(): Promise<string> {
+    return (await this.sssPrnInput.inputValue()).trim();
+  }
+
+  // Country Code is an ISO <select> (value = 2-letter code, e.g. "PH").
+  async selectCountryCode(code: string) {
+    await this.sssCountryCodeSelect.selectOption(code);
+  }
+
+  // Click Pay Now WITHOUT waiting for the Payment Summary — for negative tests,
+  // where validation is expected to reject instead.
+  async submitSssPayNow() {
+    await this.confirmPaymentButton.click();
+    console.log('[PaymentConsolePage] Pay Now clicked (SSS, expecting rejection)');
+  }
+
+  // SSS rejects a bad PRN/email after Pay Now with a small modal showing the
+  // reason and a "Try Again" button — no Payment Summary (confirmed live from
+  // QA screenshots 2026-10-12).
+  async assertSssRejection(expectedMessage: string | RegExp) {
+    await expect(
+      this.page.getByText(expectedMessage).first(),
+      `SSS rejection modal should show: ${expectedMessage}`,
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(
+      this.page.getByRole('button', { name: 'Try Again' }),
+      'Rejection modal should offer Try Again',
+    ).toBeVisible();
+    await expect(
+      this.page.getByText('Payment Summary', { exact: true }),
+      'No Payment Summary should be shown on rejection',
+    ).toBeHidden();
+    console.log('[PaymentConsolePage] SSS rejection verified:', expectedMessage);
+  }
+
+  // Blank PRN + no Country Code: client-side "This field is required." under
+  // both fields, no modal.
+  async assertSssRequiredFieldErrors() {
+    await expect(
+      this.page.getByText('This field is required.'),
+      'PRN and Country Code should both show "This field is required."',
+    ).toHaveCount(2);
+    await expect(
+      this.page.getByText('Payment Summary', { exact: true }),
+      'No Payment Summary should be shown when required fields are blank',
+    ).toBeHidden();
+    console.log('[PaymentConsolePage] SSS required-field errors verified');
+  }
+
+  // SSS - Individual's "Pay Now" shares the same id as ECPay's
+  // (#confirmPaymentButton) and opens the same #myModal Payment Summary.
+  async clickSssPayNow() {
+    await this.confirmPaymentButton.click();
+    await this.page.locator('#myModal').waitFor({ state: 'visible' });
+    console.log('[PaymentConsolePage] Pay Now clicked (SSS form)');
   }
 
   // Verifies the Payment Summary modal echoes back what was actually typed

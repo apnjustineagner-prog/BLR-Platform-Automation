@@ -58,27 +58,78 @@ export async function waitForOnboardingListLoaded(page: Page, timeoutMs = 20_000
 }
 
 /**
- * Finds a merchant's row in the onboarding table by reloading + rescanning
- * (not searching — see file header). Reloading also absorbs the
- * create/update → queryable lag on this shared test env: the row is often
- * not yet present immediately after a create/update completes, only
- * appearing a few reload passes later.
+ * Finds a merchant's row in the onboarding table.
  *
- * Returns the live row locator once found; throws after maxAttempts.
+ * The table's "Search:" box is present again (ref confirmed live via the
+ * failure error-context: `searchbox "Search:"`), and the DataTables backend
+ * (`GET /business-category/page/search`) filters server-side on `search[value]`
+ * — so typing the business name narrows the WHOLE list to the match regardless
+ * of which page it sits on. That is far more reliable than the old
+ * reload-and-scan-first-page approach, which (a) only saw page 1, and (b) could
+ * run 8 reloads × up to ~88s each, blowing past the 180s test timeout and
+ * getting the page torn down mid-reload (the "Target page ... has been closed"
+ * failures on BLR-2716/2717/2721/2723).
+ *
+ * Strategy: type the name into the search box, wait for the filtered row. Retry
+ * by re-typing (cheap) rather than full-page reloading, to absorb the
+ * create/update → queryable lag on this slow env. Falls back to a bounded
+ * reload+rescan only if the search box isn't present at all.
+ *
+ * Returns the live row locator once found; throws after the deadline.
  */
 export async function findOnboardingRow(
   page: Page,
   businessName: string,
-  maxAttempts = 8,
+  maxAttempts = 6,
 ): Promise<Locator> {
   const table = page.locator(ONBOARDING_TABLE_SELECTOR);
+  const searchBox = page.getByRole('searchbox', { name: 'Search:' });
   const targetRow = table.locator('tbody tr').filter({ hasText: businessName });
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  await table.waitFor({ state: 'visible', timeout: 60_000 });
+
+  // Preferred path: server-side search box (filters the whole list, not just
+  // page 1). Keep each attempt bounded so the total stays well under the
+  // 180s test timeout even in the worst case.
+  const hasSearch = await searchBox
+    .waitFor({ state: 'visible', timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+
+  if (hasSearch) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      // Re-type each attempt: clear then fill so a create/update that was still
+      // propagating on the previous try is re-queried. fill() replaces the
+      // existing value, so this also recovers from a stale/partial entry.
+      await searchBox.fill('');
+      await searchBox.fill(businessName);
+      // DataTables debounces then round-trips to the server; give it a beat.
+      await page.waitForTimeout(1_500);
+      await waitForOnboardingListLoaded(page);
+
+      const found = await targetRow
+        .first()
+        .waitFor({ state: 'visible', timeout: 8_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (found) return targetRow;
+
+      // Not there yet (create/update lag) — wait a little and re-search.
+      await page.waitForTimeout(2_000);
+    }
+    throw new Error(
+      `Merchant "${businessName}" not found via onboarding search after ${maxAttempts} attempts`,
+    );
+  }
+
+  // Fallback: no search box — bounded reload + rescan of the first page.
+  // Fewer attempts than before so a hung list fails fast instead of eating
+  // the whole test timeout and tearing the page down mid-reload.
+  for (let attempt = 1; attempt <= 4; attempt++) {
     if (attempt > 1) {
       await page.reload({ waitUntil: 'domcontentloaded' });
+      await table.waitFor({ state: 'visible', timeout: 60_000 });
     }
-    await table.waitFor({ state: 'visible', timeout: 60_000 });
     await waitForOnboardingListLoaded(page);
 
     const found = await targetRow
@@ -89,7 +140,7 @@ export async function findOnboardingRow(
     if (found) return targetRow;
   }
 
-  throw new Error(`Merchant "${businessName}" not found in onboarding table after ${maxAttempts} reload attempts`);
+  throw new Error(`Merchant "${businessName}" not found in onboarding table (search box absent, reload fallback exhausted)`);
 }
 
 /**
@@ -104,8 +155,33 @@ export async function waitForOnboardingRowGone(
   maxAttempts = 5,
 ): Promise<void> {
   const table = page.locator(ONBOARDING_TABLE_SELECTOR);
+  const searchBox = page.getByRole('searchbox', { name: 'Search:' });
   const targetRow = table.locator('tbody tr').filter({ hasText: businessName }).first();
 
+  await table.waitFor({ state: 'visible', timeout: 60_000 });
+
+  const hasSearch = await searchBox
+    .waitFor({ state: 'visible', timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+
+  if (hasSearch) {
+    // Server-side search scopes the whole list to this name, so "no matching
+    // row" means it's genuinely deleted (not just absent from page 1).
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      await searchBox.fill('');
+      await searchBox.fill(businessName);
+      await page.waitForTimeout(1_500);
+      await waitForOnboardingListLoaded(page);
+      const stillVisible = await targetRow.isVisible().catch(() => false);
+      if (!stillVisible) return;
+      await page.waitForTimeout(2_000);
+    }
+    await expect(targetRow, `Merchant "${businessName}" should no longer appear in the table`).toBeHidden();
+    return;
+  }
+
+  // Fallback: reload + rescan when the search box isn't present.
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {
       await page.reload({ waitUntil: 'domcontentloaded' });

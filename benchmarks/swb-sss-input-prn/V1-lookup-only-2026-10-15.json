@@ -1,0 +1,130 @@
+{
+  "label": "V1",
+  "url": "https://test-new-sss.billeroo.com/1722b098-aa14-4728-af69-e0803671d4c3/inputprn",
+  "measuredAt": "2026-10-15T07:27:45.987Z",
+  "runs": 5,
+  "validPrn": "NF260000036870",
+  "paidPrn": "OJ260000097699",
+  "summary": {
+    "openInputPrnPage": {
+      "total": {
+        "avg": 2151,
+        "median": 1802,
+        "min": 1247,
+        "max": 3944
+      },
+      "server": {
+        "avg": 116,
+        "median": 109,
+        "min": 100,
+        "max": 161
+      }
+    },
+    "validPrnLookup": {
+      "total": {
+        "avg": 1034,
+        "median": 916,
+        "min": 901,
+        "max": 1526
+      },
+      "server": {
+        "avg": 874,
+        "median": 785,
+        "min": 742,
+        "max": 1281
+      }
+    },
+    "paidPrnLookup": {
+      "total": {
+        "avg": 592,
+        "median": 569,
+        "min": 566,
+        "max": 634
+      },
+      "server": {
+        "avg": 462,
+        "median": 447,
+        "min": 429,
+        "max": 503
+      }
+    }
+  },
+  "totalFlow": {
+    "avg": 3777,
+    "median": 3269,
+    "min": 2735,
+    "max": 6093
+  },
+  "rawRuns": [
+    {
+      "openInputPrnPage": {
+        "totalMs": 3944,
+        "serverMs": 161
+      },
+      "validPrnLookup": {
+        "totalMs": 1526,
+        "serverMs": 1281
+      },
+      "paidPrnLookup": {
+        "totalMs": 623,
+        "serverMs": 502
+      }
+    },
+    {
+      "openInputPrnPage": {
+        "totalMs": 2261,
+        "serverMs": 109
+      },
+      "validPrnLookup": {
+        "totalMs": 908,
+        "serverMs": 742
+      },
+      "paidPrnLookup": {
+        "totalMs": 568,
+        "serverMs": 431
+      }
+    },
+    {
+      "openInputPrnPage": {
+        "totalMs": 1802,
+        "serverMs": 102
+      },
+      "validPrnLookup": {
+        "totalMs": 901,
+        "serverMs": 775
+      },
+      "paidPrnLookup": {
+        "totalMs": 566,
+        "serverMs": 447
+      }
+    },
+    {
+      "openInputPrnPage": {
+        "totalMs": 1247,
+        "serverMs": 110
+      },
+      "validPrnLookup": {
+        "totalMs": 919,
+        "serverMs": 786
+      },
+      "paidPrnLookup": {
+        "totalMs": 569,
+        "serverMs": 429
+      }
+    },
+    {
+      "openInputPrnPage": {
+        "totalMs": 1499,
+        "serverMs": 100
+      },
+      "validPrnLookup": {
+        "totalMs": 916,
+        "serverMs": 785
+      },
+      "paidPrnLookup": {
+        "totalMs": 634,
+        "serverMs": 503
+      }
+    }
+  ]
+}

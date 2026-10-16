@@ -269,12 +269,11 @@ export class OnboardingPage {
     ).toBeVisible();
   }
 
-  // The onboarding table has no search box (see
-  // utils/onboardingMerchantTable.ts) — findOnboardingRow reloads + rescans
-  // the table directly instead, which also absorbs the create/update →
-  // queryable lag on this slow shared test env (confirmed live 2026-09-09:
-  // BLR-2717/2724 timed out on a stale read while the row appeared moments
-  // later).
+  // Uses the onboarding table's "Search:" box (server-side filter) to locate
+  // the merchant row — see findOnboardingRow in utils/onboardingMerchantTable.ts.
+  // The search box narrows the whole list to the match, which also absorbs the
+  // create/update → queryable lag on this slow shared test env by re-searching
+  // rather than reloading the page.
   async searchMerchant(businessName: string) {
     await this.searchForMerchantRow(businessName);
   }
